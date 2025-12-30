@@ -127,6 +127,54 @@ function formatTimestamp() {
     return new Date().toLocaleTimeString();
 }
 
+// Convert CBOR result to displayable format
+function formatCborResult(data, indent = 2) {
+    // Handle Map objects (CBOR uses Maps for objects with integer keys)
+    if (data instanceof Map) {
+        const obj = {};
+        for (const [key, value] of data) {
+            obj[key] = formatCborResult(value, indent);
+        }
+        return obj;
+    }
+
+    // Handle Uint8Array - convert to hex string
+    if (data instanceof Uint8Array || (data && data.constructor && data.constructor.name === 'Uint8Array')) {
+        return '0x' + Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Handle ArrayBuffer
+    if (data instanceof ArrayBuffer) {
+        return '0x' + Array.from(new Uint8Array(data)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Handle arrays
+    if (Array.isArray(data)) {
+        return data.map(item => formatCborResult(item, indent));
+    }
+
+    // Handle plain objects
+    if (data && typeof data === 'object' && !(data instanceof Date)) {
+        const obj = {};
+        for (const [key, value] of Object.entries(data)) {
+            obj[key] = formatCborResult(value, indent);
+        }
+        return obj;
+    }
+
+    // Handle BigInt
+    if (typeof data === 'bigint') {
+        return data.toString();
+    }
+
+    return data;
+}
+
+function stringifyCbor(data) {
+    const formatted = formatCborResult(data);
+    return JSON.stringify(formatted, null, 2);
+}
+
 function updateConnectionUI(connected, ready = false) {
     if (connected) {
         elements.connectionStatus.classList.add('connected');
@@ -244,33 +292,38 @@ elements.connectBtn.addEventListener('click', async () => {
 // Fetch system info
 async function fetchSystemInfo() {
     try {
-        // SID for /ietf-system:system-state/platform is typically around 1716
-        // Using instance-identifier format for query
-        const query = [1716]; // SID for system-state/platform
+        const query = [1716];
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
             console.log('System info:', data);
 
-            // Try to extract platform info
-            if (data) {
-                // The response format depends on the YANG model
-                // This is a simplified extraction
-                const platformStr = JSON.stringify(data, (key, value) =>
-                    typeof value === 'bigint' ? value.toString() : value
-                , 2);
+            const formatted = formatCborResult(data);
+            console.log('Formatted system info:', formatted);
 
-                // Update UI with available info
-                if (typeof data === 'object') {
-                    const entries = data instanceof Map ? Array.from(data.entries()) : Object.entries(data);
-                    for (const [key, value] of entries) {
-                        if (typeof value === 'string') {
-                            if (key.toString().includes('name') || key < 10) {
+            // Try to extract platform info from the response
+            if (formatted) {
+                // Look for platform info in various possible structures
+                const platformData = formatted['1716'] || formatted;
+
+                if (typeof platformData === 'object' && platformData !== null) {
+                    // Common SID offsets for platform info
+                    // os-name: +3, os-version: +5, machine: +2
+                    const osName = platformData['3'] || platformData['os-name'] || platformData['1719'];
+                    const osVersion = platformData['5'] || platformData['os-version'] || platformData['1721'];
+                    const machine = platformData['2'] || platformData['machine'] || platformData['1718'];
+
+                    if (osName) elements.platformInfo.textContent = osName;
+                    if (osVersion) elements.versionInfo.textContent = osVersion;
+                    if (machine && !osName) elements.platformInfo.textContent = machine;
+
+                    // If still nothing, show first string values found
+                    if (elements.platformInfo.textContent === '-') {
+                        for (const [key, value] of Object.entries(platformData)) {
+                            if (typeof value === 'string' && value.length > 0) {
                                 elements.platformInfo.textContent = value;
-                            }
-                            if (key.toString().includes('version') || key > 10) {
-                                elements.versionInfo.textContent = value;
+                                break;
                             }
                         }
                     }
@@ -286,18 +339,62 @@ async function fetchSystemInfo() {
 elements.getChecksumBtn?.addEventListener('click', async () => {
     try {
         showLoading('체크섬 조회 중...');
-        // Query for YANG catalog checksum - this is device-specific
-        const query = [29304]; // SID varies by device
+        const query = [29304];
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.yangCacheStatus.textContent = typeof data === 'string' ? data :
-                JSON.stringify(data, (k, v) => typeof v === 'bigint' ? v.toString() : v);
+            const formatted = formatCborResult(data);
+
+            // Extract checksum hex string
+            let checksumHex = null;
+            if (formatted && formatted['29304']) {
+                checksumHex = formatted['29304'];
+            } else if (typeof formatted === 'string' && formatted.startsWith('0x')) {
+                checksumHex = formatted;
+            }
+
+            if (checksumHex) {
+                // Remove '0x' prefix if present
+                currentChecksum = checksumHex.replace('0x', '');
+                elements.yangCacheStatus.textContent = checksumHex;
+                elements.downloadYangBtn.disabled = false;
+            } else {
+                elements.yangCacheStatus.textContent = stringifyCbor(data);
+            }
             showToast('체크섬 조회 완료', 'success');
         }
     } catch (error) {
         showToast('체크섬 조회 실패: ' + error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+});
+
+// YANG Catalog Download
+elements.downloadYangBtn?.addEventListener('click', async () => {
+    if (!currentChecksum) {
+        showToast('먼저 체크섬을 조회하세요', 'warning');
+        return;
+    }
+
+    try {
+        showLoading('YANG 카탈로그 다운로드 중...');
+        addTerminalLine(`[${formatTimestamp()}] YANG 카탈로그 다운로드 시작: ${currentChecksum}`, 'info');
+
+        const success = await yangCatalog.download(currentChecksum);
+
+        if (success && yangCatalog.sidMap.size > 0) {
+            showToast(`YANG 카탈로그 로드 완료 (${yangCatalog.sidMap.size} 매핑)`, 'success');
+            addTerminalLine(`[${formatTimestamp()}] YANG 카탈로그 로드 완료: ${yangCatalog.sidMap.size} SID 매핑`, 'info');
+            elements.yangCacheStatus.textContent = `${currentChecksum.slice(0, 8)}... (${yangCatalog.sidMap.size} SIDs)`;
+        } else {
+            showToast('YANG 카탈로그 다운로드 실패 (기본 매핑 사용)', 'warning');
+            addTerminalLine(`[${formatTimestamp()}] YANG 카탈로그 다운로드 실패, 기본 매핑 사용`, 'error');
+        }
+    } catch (error) {
+        showToast('YANG 다운로드 실패: ' + error.message, 'error');
+        addTerminalLine(`[${formatTimestamp()}] YANG 다운로드 에러: ${error.message}`, 'error');
     } finally {
         hideLoading();
     }
@@ -310,9 +407,7 @@ elements.getConfigBtn?.addEventListener('click', async () => {
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            const jsonStr = JSON.stringify(data, (key, value) =>
-                typeof value === 'bigint' ? value.toString() : value
-            , 2);
+            const jsonStr = stringifyCbor(data);
 
             // Download as file
             const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -335,16 +430,12 @@ elements.getConfigBtn?.addEventListener('click', async () => {
 elements.fetchSystemBtn?.addEventListener('click', async () => {
     try {
         showLoading('시스템 정보 조회 중...');
-        const query = [1716]; // system-state/platform SID
+        const query = [1716];
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = JSON.stringify(data, (key, value) =>
-                typeof value === 'bigint' ? value.toString() : value
-            , 2);
-
-            // Switch to config panel
+            elements.fetchResult.textContent = stringifyCbor(data);
             document.querySelector('[data-panel="config"]').click();
             showToast('시스템 정보 조회 완료', 'success');
         }
@@ -358,15 +449,12 @@ elements.fetchSystemBtn?.addEventListener('click', async () => {
 elements.fetchBridgeBtn?.addEventListener('click', async () => {
     try {
         showLoading('브릿지 정보 조회 중...');
-        const query = [1523]; // bridges SID (approximate)
+        const query = [1523];
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = JSON.stringify(data, (key, value) =>
-                typeof value === 'bigint' ? value.toString() : value
-            , 2);
-
+            elements.fetchResult.textContent = stringifyCbor(data);
             document.querySelector('[data-panel="config"]').click();
             showToast('브릿지 정보 조회 완료', 'success');
         }
@@ -388,16 +476,13 @@ elements.fetchBtn?.addEventListener('click', async () => {
     try {
         showLoading('설정 조회 중...');
 
-        // Convert path to SID query
-        // This is a simplified version - real implementation needs YANG catalog
+        // Convert path to SID query using YANG catalog
         const query = pathToSidQuery(path);
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = JSON.stringify(data, (key, value) =>
-                typeof value === 'bigint' ? value.toString() : value
-            , 2);
+            elements.fetchResult.textContent = stringifyCbor(data);
             showToast('조회 완료', 'success');
         } else {
             elements.fetchResult.textContent = `// 응답 코드: ${response.getCodeClass()}.${response.getCodeDetail()}`;
@@ -411,21 +496,142 @@ elements.fetchBtn?.addEventListener('click', async () => {
     }
 });
 
-// Path to SID conversion (simplified)
-function pathToSidQuery(path) {
-    // Common SID mappings for VelocityDRIVE-SP
-    const sidMap = {
-        '/ietf-system:system-state': [1716],
-        '/ietf-system:system-state/platform': [1716],
-        '/ieee802-dot1q-bridge:bridges': [1523],
-        '/ietf-interfaces:interfaces': [1533],
-        '/ietf-yang-library:yang-library': [29304],
-    };
+// YANG Catalog Manager
+const yangCatalog = {
+    checksum: null,
+    sidMap: new Map(), // path -> SID
+    loaded: false,
 
-    // Check for exact match
-    for (const [p, sid] of Object.entries(sidMap)) {
-        if (path.startsWith(p)) {
-            return sid;
+    // Download YANG catalog from GitHub
+    async download(checksumHex) {
+        const baseUrl = `https://raw.githubusercontent.com/nicholascw/MCHP-yang/refs/heads/main/${checksumHex}`;
+
+        try {
+            // Try to get the SID index file
+            const indexUrl = `${baseUrl}/sid-index.json`;
+            let response = await fetch(indexUrl);
+
+            if (!response.ok) {
+                // Try alternate structure - list SID files
+                const sidListUrl = `${baseUrl}/sid/`;
+                console.log('Trying to fetch SID files from:', sidListUrl);
+
+                // For GitHub raw, we need to know the file names
+                // Common SID files for VelocityDRIVE
+                const sidFiles = [
+                    'ietf-system@2014-08-06.sid',
+                    'ieee802-dot1q-bridge@2023-10-26.sid',
+                    'ietf-interfaces@2018-02-20.sid',
+                    'ietf-yang-library@2019-01-04.sid',
+                    'ieee802-dot1q-sched@2024-02-07.sid',
+                    'ieee802-dot1cb-stream-identification@2021-05-06.sid',
+                    'ieee802-dot1cb-frer@2021-05-06.sid'
+                ];
+
+                for (const sidFile of sidFiles) {
+                    try {
+                        const sidUrl = `${baseUrl}/sid/${sidFile}`;
+                        const sidResponse = await fetch(sidUrl);
+                        if (sidResponse.ok) {
+                            const sidData = await sidResponse.json();
+                            this.parseSidFile(sidData);
+                        }
+                    } catch (e) {
+                        console.log(`Failed to fetch ${sidFile}:`, e.message);
+                    }
+                }
+            } else {
+                const index = await response.json();
+                console.log('SID index loaded:', index);
+                // Process index...
+            }
+
+            this.checksum = checksumHex;
+            this.loaded = true;
+            console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
+            return true;
+        } catch (error) {
+            console.error('Failed to download YANG catalog:', error);
+            return false;
+        }
+    },
+
+    // Parse SID file and build mapping
+    parseSidFile(sidData) {
+        if (!sidData || !sidData.items) return;
+
+        const moduleName = sidData['module-name'];
+        for (const item of sidData.items) {
+            if (item.sid && item.identifier) {
+                // Build full path
+                const path = item.namespace === 'module'
+                    ? `/${moduleName}:${item.identifier}`
+                    : `/${moduleName}:${item.identifier}`;
+                this.sidMap.set(path, item.sid);
+
+                // Also store shorter version
+                if (item.identifier) {
+                    this.sidMap.set(item.identifier, item.sid);
+                }
+            }
+        }
+    },
+
+    // Get SID for a path
+    getSid(path) {
+        // Direct lookup
+        if (this.sidMap.has(path)) {
+            return this.sidMap.get(path);
+        }
+
+        // Try without leading slash
+        const pathNoSlash = path.startsWith('/') ? path.slice(1) : path;
+        if (this.sidMap.has(pathNoSlash)) {
+            return this.sidMap.get(pathNoSlash);
+        }
+
+        // Try to find partial match
+        for (const [p, sid] of this.sidMap) {
+            if (p.includes(pathNoSlash) || pathNoSlash.includes(p)) {
+                return sid;
+            }
+        }
+
+        return null;
+    }
+};
+
+// Built-in SID mappings for common paths (fallback)
+const defaultSidMap = {
+    '/ietf-system:system-state': 1716,
+    '/ietf-system:system-state/platform': 1716,
+    '/ietf-system:system': 1705,
+    '/ieee802-dot1q-bridge:bridges': 1523,
+    '/ietf-interfaces:interfaces': 1533,
+    '/ietf-interfaces:interfaces/interface': 1533,
+    '/ietf-yang-library:yang-library': 29304,
+    '/ietf-yang-library:modules-state': 29269,
+    'system-state': 1716,
+    'system': 1705,
+    'bridges': 1523,
+    'interfaces': 1533,
+    'yang-library': 29304
+};
+
+// Path to SID conversion
+function pathToSidQuery(path) {
+    // Try YANG catalog first
+    if (yangCatalog.loaded) {
+        const sid = yangCatalog.getSid(path);
+        if (sid) {
+            return [sid];
+        }
+    }
+
+    // Check default mappings
+    for (const [p, sid] of Object.entries(defaultSidMap)) {
+        if (path.startsWith(p) || path === p) {
+            return [sid];
         }
     }
 
@@ -437,6 +643,9 @@ function pathToSidQuery(path) {
     // Default to system-state
     return [1716];
 }
+
+// Store current checksum for YANG download
+let currentChecksum = null;
 
 // Copy result
 elements.copyResultBtn?.addEventListener('click', () => {
