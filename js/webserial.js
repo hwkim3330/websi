@@ -290,19 +290,118 @@ export class WebSerialManager extends EventTarget {
     }
 
     /**
-     * Send iFETCH request
+     * Send iFETCH request with Block2 response support
      */
     async sendiFetchRequest(query, options = {}) {
-        const messageId = options.messageId || Math.floor(Math.random() * 65536);
-        const token = options.token || new Uint8Array(0);
+        if (!this.isConnected) {
+            throw new Error('Not connected');
+        }
+        if (!this.boardReady) {
+            throw new Error('Board not ready');
+        }
 
+        const payloads = [];
+        let lastResponse = null;
+
+        // Token must be same for all blocks (RFC 7959)
+        const token = options.token || new Uint8Array([
+            Math.floor(Math.random() * 256),
+            Math.floor(Math.random() * 256)
+        ]);
+
+        // Initial request
+        const initialMessageId = Math.floor(Math.random() * 65536);
         const coapFrame = buildiFetchRequest(query, {
-            messageId,
+            messageId: initialMessageId,
             token,
             ...options
         });
 
-        return this._sendRequest(coapFrame, messageId);
+        const firstResponse = await this._sendRequest(coapFrame, initialMessageId);
+        lastResponse = firstResponse;
+
+        if (!firstResponse.isSuccess()) {
+            throw new Error(`iFETCH failed with code ${firstResponse.code}`);
+        }
+
+        if (firstResponse.payload) {
+            payloads.push(firstResponse.payload);
+        }
+
+        // Check for Block2 in response (server-initiated block transfer)
+        let block2 = firstResponse.getBlock2Value();
+        let more = block2 ? block2.m : false;
+        let blockNum = block2 ? block2.num : 0;
+
+        // Fetch remaining blocks if needed
+        while (more) {
+            blockNum++;
+
+            const messageId = Math.floor(Math.random() * 65536);
+            const block2Value = encodeBlock2Value(blockNum, false, block2.szx);
+            const block2Option = { number: OptionNumber.BLOCK2, value: block2Value };
+
+            // Build iFETCH with Block2 option for continuation
+            const continuationFrame = buildMessage({
+                type: MessageType.CON,
+                code: MethodCode.FETCH,
+                messageId,
+                token,
+                options: [
+                    { number: OptionNumber.URI_PATH, value: 'c' },
+                    { number: OptionNumber.URI_QUERY, value: 'd=a' },
+                    { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
+                    { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
+                    block2Option
+                ],
+                payload: new Uint8Array(CBOR.encode(query))
+            });
+
+            const coapResponse = await this._sendRequest(continuationFrame, messageId);
+            lastResponse = coapResponse;
+
+            if (!coapResponse.isSuccess()) {
+                throw new Error(`Block ${blockNum} failed with code ${coapResponse.code}`);
+            }
+
+            if (coapResponse.payload) {
+                payloads.push(coapResponse.payload);
+            }
+
+            const nextBlock2 = coapResponse.getBlock2Value();
+            if (nextBlock2) {
+                more = nextBlock2.m;
+                block2 = nextBlock2;
+            } else {
+                more = false;
+            }
+        }
+
+        // Assemble payload if multiple blocks
+        if (payloads.length > 1) {
+            const totalLength = payloads.reduce((sum, p) => sum + p.length, 0);
+            const assembledPayload = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const p of payloads) {
+                assembledPayload.set(p, offset);
+                offset += p.length;
+            }
+
+            return {
+                ...lastResponse,
+                payload: assembledPayload,
+                getPayloadAsCBOR: () => {
+                    if (assembledPayload.length === 0) return null;
+                    const buffer = assembledPayload.buffer.slice(
+                        assembledPayload.byteOffset,
+                        assembledPayload.byteOffset + assembledPayload.byteLength
+                    );
+                    return CBOR.decode(buffer);
+                }
+            };
+        }
+
+        return lastResponse;
     }
 
     /**
