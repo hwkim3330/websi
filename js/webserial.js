@@ -210,11 +210,19 @@ export class WebSerialManager extends EventTarget {
             const errorMessage = new TextDecoder().decode(frame.payload);
             console.log('[MUP1] Trace frame:', errorMessage);
 
-            // Fail pending requests
-            for (const [messageId, pending] of this.pendingRequests.entries()) {
-                clearTimeout(pending.timeout);
-                pending.reject(new Error(`Device error: ${errorMessage}`));
-                this.pendingRequests.delete(messageId);
+            // TRACE frames are often informational logging from the device
+            // Don't reject pending requests - wait for actual CoAP response
+            // Only reject on fatal TRACE errors that won't have a CoAP response
+            const isFatalError = errorMessage.includes('coap data cannot be transported by MUP1') ||
+                                 errorMessage.includes('MUP1 frame too large');
+
+            if (isFatalError && this.pendingRequests.size > 0) {
+                console.warn('[MUP1] Fatal error, failing pending requests');
+                for (const [messageId, pending] of this.pendingRequests.entries()) {
+                    clearTimeout(pending.timeout);
+                    pending.reject(new Error(`Device error: ${errorMessage}`));
+                    this.pendingRequests.delete(messageId);
+                }
             }
 
             this.dispatchEvent(new CustomEvent('trace', {
@@ -291,6 +299,7 @@ export class WebSerialManager extends EventTarget {
 
     /**
      * Send iFETCH request with Block2 response support
+     * Uses small block size (256 bytes) to fit within MUP1 frame limits
      */
     async sendiFetchRequest(query, options = {}) {
         if (!this.isConnected) {
@@ -309,12 +318,27 @@ export class WebSerialManager extends EventTarget {
             Math.floor(Math.random() * 256)
         ]);
 
-        // Initial request
+        // Block size: SZX=4 means 2^(4+4) = 256 bytes (fits in MUP1)
+        const szx = options.blockSize || 4;
+
+        // Initial request with Block2 to request small block size
         const initialMessageId = Math.floor(Math.random() * 65536);
-        const coapFrame = buildiFetchRequest(query, {
+        const block2Option = { number: OptionNumber.BLOCK2, value: encodeBlock2Value(0, false, szx) };
+
+        // Build iFETCH with Block2 option
+        const coapFrame = buildMessage({
+            type: MessageType.CON,
+            code: MethodCode.FETCH,
             messageId: initialMessageId,
             token,
-            ...options
+            options: [
+                { number: OptionNumber.URI_PATH, value: 'c' },
+                { number: OptionNumber.URI_QUERY, value: 'd=a' },
+                { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
+                { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
+                block2Option
+            ],
+            payload: new Uint8Array(CBOR.encode(query))
         });
 
         const firstResponse = await this._sendRequest(coapFrame, initialMessageId);
@@ -497,6 +521,7 @@ export class WebSerialManager extends EventTarget {
 
     /**
      * Send GET request with Block2 support
+     * Uses small block size (256 bytes) to fit within MUP1 frame limits
      */
     async sendGetRequest(options = {}) {
         if (!this.isConnected) {
@@ -514,13 +539,18 @@ export class WebSerialManager extends EventTarget {
             Math.floor(Math.random() * 256)
         ]);
 
+        // Block size: SZX=4 means 2^(4+4) = 256 bytes (fits in MUP1)
+        const szx = options.blockSize || 4;
+        const block2Option = { number: OptionNumber.BLOCK2, value: encodeBlock2Value(0, false, szx) };
+
         const initialMessageId = Math.floor(Math.random() * 65536);
         const { token: _token, messageId: _mid, ...restOptions } = options;
 
         const initialCoapFrame = buildGetRequest({
             ...restOptions,
             messageId: initialMessageId,
-            token
+            token,
+            options: [block2Option, ...(options.options || [])]
         });
 
         const firstResponse = await this._sendRequest(initialCoapFrame, initialMessageId);
