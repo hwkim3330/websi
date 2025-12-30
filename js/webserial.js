@@ -316,7 +316,13 @@ export class WebSerialManager extends EventTarget {
             throw new Error('Board not ready');
         }
 
-        const payload = patch instanceof Uint8Array ? patch : new Uint8Array(CBOR.encode(patch));
+        let payload;
+        if (patch instanceof Uint8Array) {
+            payload = patch;
+        } else {
+            const encoded = CBOR.encode(patch);
+            payload = new Uint8Array(encoded);
+        }
         const totalSize = payload.length;
 
         const token = options.token || new Uint8Array([
@@ -479,7 +485,14 @@ export class WebSerialManager extends EventTarget {
         return {
             ...lastResponse,
             payload: assembledPayload,
-            getPayloadAsCBOR: () => assembledPayload.length > 0 ? CBOR.decode(assembledPayload) : null
+            getPayloadAsCBOR: () => {
+                if (assembledPayload.length === 0) return null;
+                const buffer = assembledPayload.buffer.slice(
+                    assembledPayload.byteOffset,
+                    assembledPayload.byteOffset + assembledPayload.byteLength
+                );
+                return CBOR.decode(buffer);
+            }
         };
     }
 

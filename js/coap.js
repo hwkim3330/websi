@@ -267,7 +267,9 @@ export function decodeBlock1Value(value) {
  * Build iFETCH request
  */
 export function buildiFetchRequest(query, options = {}) {
-    const payload = CBOR.encode(query);
+    // CBOR.encode returns ArrayBuffer
+    const encoded = CBOR.encode(query);
+    const payload = new Uint8Array(encoded);
 
     return buildMessage({
         type: MessageType.CON,
@@ -279,7 +281,7 @@ export function buildiFetchRequest(query, options = {}) {
             { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
             { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR }
         ],
-        payload: new Uint8Array(payload),
+        payload,
         ...options
     });
 }
@@ -288,7 +290,13 @@ export function buildiFetchRequest(query, options = {}) {
  * Build iPATCH request
  */
 export function buildiPatchRequest(patch, options = {}) {
-    const payload = patch instanceof Uint8Array ? patch : new Uint8Array(CBOR.encode(patch));
+    let payload;
+    if (patch instanceof Uint8Array) {
+        payload = patch;
+    } else {
+        const encoded = CBOR.encode(patch);
+        payload = new Uint8Array(encoded);
+    }
 
     return buildMessage({
         type: MessageType.CON,
@@ -395,7 +403,12 @@ export function parseResponse(data) {
         isSuccess: () => (code >> 5) === 2,
         getCodeClass: () => code >> 5,
         getCodeDetail: () => code & 0x1F,
-        getPayloadAsCBOR: () => payload ? CBOR.decode(payload) : null,
+        getPayloadAsCBOR: () => {
+            if (!payload) return null;
+            // CBOR.decode expects ArrayBuffer, not Uint8Array
+            const buffer = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength);
+            return CBOR.decode(buffer);
+        },
         getBlock2Value: () => {
             const block2Opt = options.find(opt => opt.number === OptionNumber.BLOCK2);
             return block2Opt ? decodeBlock2Value(block2Opt.value) : null;
