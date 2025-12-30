@@ -232,16 +232,16 @@ function showToast(message, type = 'info') {
 
 function updateConnectionUI(connected) {
     if (connected) {
-        elements.statusDot.classList.add('connected');
-        elements.statusText.textContent = '연결됨';
-        elements.connectBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg> 해제';
-        elements.refreshBtn.disabled = false;
+        elements.statusDot?.classList.add('connected');
+        if (elements.statusText) elements.statusText.textContent = '연결됨';
+        if (elements.connectBtn) elements.connectBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg> 해제';
+        if (elements.refreshBtn) elements.refreshBtn.disabled = false;
     } else {
-        elements.statusDot.classList.remove('connected');
-        elements.statusText.textContent = '연결 안됨';
-        elements.connectBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg> 연결';
-        elements.refreshBtn.disabled = true;
-        elements.interfaceList.innerHTML = `
+        elements.statusDot?.classList.remove('connected');
+        if (elements.statusText) elements.statusText.textContent = '연결 안됨';
+        if (elements.connectBtn) elements.connectBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg> 연결';
+        if (elements.refreshBtn) elements.refreshBtn.disabled = true;
+        if (elements.interfaceList) elements.interfaceList.innerHTML = `
             <div class="placeholder">
                 <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
@@ -564,7 +564,7 @@ async function setInterfaceEnabled(ifIndex, enabled) {
             showToast(`${iface.name} ${enabled ? '활성화' : '비활성화'} 완료`, 'success');
             await fetchInterfaces();
         } else {
-            showToast(`설정 실패: ${response.getCodeName()}`, 'error');
+            showToast(`설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
         }
     } catch (error) {
         showToast(`오류: ${error.message}`, 'error');
@@ -618,7 +618,7 @@ async function applyTasConfig() {
             showToast('TAS 설정 적용 완료', 'success');
             await fetchInterfaces();
         } else {
-            showToast(`TAS 설정 실패: ${response.getCodeName()}`, 'error');
+            showToast(`TAS 설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
         }
     } catch (error) {
         showToast(`오류: ${error.message}`, 'error');
