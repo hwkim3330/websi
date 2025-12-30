@@ -558,6 +558,16 @@ export class WebSerialManager extends EventTarget {
         }
         const totalSize = payload.length;
 
+        // Debug: show CBOR payload
+        console.log(`[iPatch] Payload size: ${totalSize} bytes`);
+        console.log(`[iPatch] CBOR hex: ${this._toHex(payload)}`);
+        try {
+            const decoded = CBOR.decode(payload.buffer);
+            console.log(`[iPatch] CBOR decoded:`, decoded);
+        } catch (e) {
+            console.warn(`[iPatch] CBOR decode check failed:`, e.message);
+        }
+
         const token = options.token || new Uint8Array([
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256)
