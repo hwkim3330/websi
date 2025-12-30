@@ -659,5 +659,18 @@ elements.expandAllBtn.addEventListener('click', () => {
 });
 
 // Initialize
-updateConnectionUI(false);
-log('VelocityDRIVE-SP YANG Browser 준비됨', 'info');
+async function init() {
+    updateConnectionUI(false);
+    log('VelocityDRIVE-SP YANG Browser 준비됨', 'info');
+
+    // Load catalogs immediately on page load
+    console.log('[INIT] Loading YANG catalogs on page load...');
+    const loaded = await loadAllCatalogs();
+    if (loaded) {
+        log(`YANG 카탈로그 준비 완료 (${yangCatalog.sidToPath.size} SIDs)`, 'success');
+    } else {
+        log('YANG 카탈로그 로드 실패 - SID 이름 표시 안됨', 'error');
+    }
+}
+
+init();
