@@ -321,14 +321,17 @@ export class WebSerialManager extends EventTarget {
             Math.floor(Math.random() * 256)
         ]);
 
-        // SZX=2 → 64 bytes (default for MUP1 frame limit)
-        // SZX=3 → 128 bytes
-        // SZX=4 → 256 bytes
+        // SZX=2 → 64 bytes (safe for MUP1 frame limit)
+        // SZX=1 → 32 bytes (more conservative)
+        // SZX=0 → 16 bytes (most conservative)
         const preferredSzx = options.blockSize !== undefined ? options.blockSize : 2;
 
-        // Initial request WITHOUT Block2 (let server decide block size)
-        // Board firmware rejects non-zero Block2 NUM in what it considers "initial" requests
+        // Initial request WITH Block2 NUM=0 to request small block size
+        // Board firmware requires:
+        // - Initial request: Block2 NUM must be 0
+        // - Continued request: Block2 MUST be present with NUM > 0
         const initialMessageId = Math.floor(Math.random() * 65536);
+        const initialBlock2Value = encodeBlock2Value(0, false, preferredSzx);
 
         const coapFrame = buildMessage({
             type: MessageType.CON,
@@ -339,7 +342,8 @@ export class WebSerialManager extends EventTarget {
                 { number: OptionNumber.URI_PATH, value: 'c' },
                 { number: OptionNumber.URI_QUERY, value: 'd=a' },
                 { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
-                { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR }
+                { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
+                { number: OptionNumber.BLOCK2, value: initialBlock2Value }
             ],
             payload: new Uint8Array(CBOR.encode(query))
         });
