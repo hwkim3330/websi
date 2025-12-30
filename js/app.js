@@ -289,13 +289,28 @@ const sidToName = {
     29278: 'submodule'
 };
 
+// Get human-readable name for SID
+function getSidName(sid) {
+    // Try official catalog first
+    if (yangCatalog.sidToPath && yangCatalog.sidToPath.has(sid)) {
+        const path = yangCatalog.sidToPath.get(sid);
+        // Extract last segment: /ietf-system:system-state/platform -> platform
+        const parts = path.split('/');
+        const last = parts[parts.length - 1];
+        // Remove module prefix: ieee802-dot1q-bridge:bridges -> bridges
+        return last.includes(':') ? last.split(':')[1] : last;
+    }
+    // Fallback to hardcoded mappings
+    return sidToName[sid] || null;
+}
+
 // Decode delta-SID CBOR to human-readable format
 function decodeDeltaSid(data, parentSid = null) {
     if (data instanceof Map) {
         const obj = {};
         for (const [key, value] of data) {
             const absoluteSid = parentSid !== null ? parentSid + key : key;
-            const name = sidToName[absoluteSid] || `sid:${absoluteSid}`;
+            const name = getSidName(absoluteSid) || `sid:${absoluteSid}`;
             obj[name] = decodeDeltaSid(value, absoluteSid);
         }
         return obj;
@@ -315,7 +330,7 @@ function decodeDeltaSid(data, parentSid = null) {
             const numKey = parseInt(key);
             if (!isNaN(numKey)) {
                 const absoluteSid = parentSid !== null ? parentSid + numKey : numKey;
-                const name = sidToName[absoluteSid] || `sid:${absoluteSid}`;
+                const name = getSidName(absoluteSid) || `sid:${absoluteSid}`;
                 obj[name] = decodeDeltaSid(value, absoluteSid);
             } else {
                 obj[key] = decodeDeltaSid(value, parentSid);
@@ -683,31 +698,63 @@ elements.fetchBtn?.addEventListener('click', async () => {
 // YANG Catalog Manager
 const yangCatalog = {
     checksum: null,
-    sidMap: new Map(), // path -> SID
+    sidMap: new Map(),      // path -> SID
+    sidToPath: new Map(),   // SID -> path (for decoding)
     loaded: false,
 
     // Download YANG catalog from Microchip servers
     async download(checksumHex) {
-        // Note: Microchip servers may not have CORS enabled, so built-in mappings are used as fallback
-        // HTTPS sources (S3 website endpoint doesn't support HTTPS, so we skip it)
-        const sources = [
-            // GitHub mirror might exist
-            `https://raw.githubusercontent.com/nicholascw/MCHP-yang/main/${checksumHex}/sid-index.json`
-        ];
-
         try {
-            // Browser can't download tar.gz from Microchip servers (CORS/Mixed Content)
-            // Use built-in SID mappings instead
-            console.log(`Loading built-in SID mappings for checksum: ${checksumHex}`);
-            await this.loadBuiltInMappings(checksumHex);
+            // Try to load from pre-extracted JSON file first
+            console.log(`Loading YANG SID catalog for checksum: ${checksumHex}`);
 
+            const response = await fetch('./js/yang-sids.json');
+            if (response.ok) {
+                const data = await response.json();
+
+                // Verify checksum matches
+                if (data.checksum === checksumHex) {
+                    console.log(`Loaded official Microchip YANG catalog (${checksumHex})`);
+
+                    // Load pathToSid mappings
+                    for (const [path, sid] of Object.entries(data.pathToSid)) {
+                        this.sidMap.set(path, sid);
+
+                        // Also add short name alias
+                        const parts = path.split('/');
+                        const shortName = parts[parts.length - 1];
+                        if (shortName && !shortName.includes(':')) {
+                            this.sidMap.set(shortName, sid);
+                        }
+                    }
+
+                    // Load sidToPath for reverse lookup
+                    if (data.sidToPath) {
+                        this.sidToPath = new Map(Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v]));
+                    }
+
+                    this.checksum = checksumHex;
+                    this.loaded = true;
+                    console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
+                    return true;
+                } else {
+                    console.warn(`Checksum mismatch: expected ${checksumHex}, got ${data.checksum}`);
+                }
+            }
+
+            // Fallback to built-in mappings
+            console.log(`Falling back to built-in SID mappings`);
+            await this.loadBuiltInMappings(checksumHex);
             this.checksum = checksumHex;
             this.loaded = true;
-            console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
             return true;
         } catch (error) {
             console.error('Failed to load YANG catalog:', error);
-            return false;
+            // Try built-in as last resort
+            await this.loadBuiltInMappings(checksumHex);
+            this.checksum = checksumHex;
+            this.loaded = true;
+            return true;
         }
     },
 
