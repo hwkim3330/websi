@@ -539,6 +539,140 @@ export class WebSerialManager extends EventTarget {
     }
 
     /**
+     * Encode CBOR integer (major type 0 for positive, 1 for negative)
+     */
+    _encodeCBORInteger(value) {
+        const parts = [];
+        if (value >= 0) {
+            // Major type 0: unsigned integer
+            if (value < 24) {
+                parts.push(value);
+            } else if (value < 256) {
+                parts.push(0x18, value);
+            } else if (value < 65536) {
+                parts.push(0x19, (value >> 8) & 0xff, value & 0xff);
+            } else if (value < 4294967296) {
+                parts.push(0x1a, (value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
+            } else {
+                throw new Error(`Integer ${value} too large`);
+            }
+        } else {
+            // Major type 1: negative integer (-1-n encoded)
+            const n = -1 - value;
+            if (n < 24) {
+                parts.push(0x20 | n);
+            } else if (n < 256) {
+                parts.push(0x38, n);
+            } else if (n < 65536) {
+                parts.push(0x39, (n >> 8) & 0xff, n & 0xff);
+            } else {
+                throw new Error(`Negative integer ${value} too large`);
+            }
+        }
+        return new Uint8Array(parts);
+    }
+
+    /**
+     * Encode Map with integer keys to CBOR
+     * CORECONF (RFC 9254) requires integer SID keys
+     */
+    _encodeMapWithIntegerKeys(data) {
+        if (!(data instanceof Map)) {
+            // Not a Map, use standard encoding
+            return new Uint8Array(CBOR.encode(data));
+        }
+
+        const entries = Array.from(data.entries());
+        const encodedPairs = [];
+
+        for (const [key, value] of entries) {
+            // Encode key as CBOR integer
+            const keyInt = typeof key === 'string' ? parseInt(key, 10) : key;
+            if (isNaN(keyInt)) {
+                throw new Error(`Invalid integer key: ${key}`);
+            }
+            encodedPairs.push(this._encodeCBORInteger(keyInt));
+
+            // Encode value - recursively handle nested Maps
+            const encodedValue = this._encodeValueWithIntegerKeys(value);
+            encodedPairs.push(encodedValue);
+        }
+
+        // Build CBOR map header (major type 5)
+        const mapLen = entries.length;
+        let header;
+        if (mapLen < 24) {
+            header = new Uint8Array([0xa0 | mapLen]);
+        } else if (mapLen < 256) {
+            header = new Uint8Array([0xb8, mapLen]);
+        } else {
+            header = new Uint8Array([0xb9, (mapLen >> 8) & 0xff, mapLen & 0xff]);
+        }
+
+        // Concatenate all parts
+        const totalLen = header.length + encodedPairs.reduce((sum, p) => sum + p.length, 0);
+        const result = new Uint8Array(totalLen);
+        let offset = 0;
+        result.set(header, offset);
+        offset += header.length;
+        for (const part of encodedPairs) {
+            result.set(part, offset);
+            offset += part.length;
+        }
+
+        return result;
+    }
+
+    /**
+     * Encode value with integer key support for nested structures
+     */
+    _encodeValueWithIntegerKeys(value) {
+        if (value instanceof Map) {
+            return this._encodeMapWithIntegerKeys(value);
+        }
+        if (Array.isArray(value)) {
+            // Encode array - each element may contain Maps
+            const encodedItems = value.map(item => this._encodeValueWithIntegerKeys(item));
+            const arrLen = value.length;
+            let header;
+            if (arrLen < 24) {
+                header = new Uint8Array([0x80 | arrLen]); // major type 4
+            } else if (arrLen < 256) {
+                header = new Uint8Array([0x98, arrLen]);
+            } else {
+                header = new Uint8Array([0x99, (arrLen >> 8) & 0xff, arrLen & 0xff]);
+            }
+            const totalLen = header.length + encodedItems.reduce((sum, p) => sum + p.length, 0);
+            const result = new Uint8Array(totalLen);
+            let offset = 0;
+            result.set(header, offset);
+            offset += header.length;
+            for (const item of encodedItems) {
+                result.set(item, offset);
+                offset += item.length;
+            }
+            return result;
+        }
+        if (value !== null && typeof value === 'object' && !(value instanceof Uint8Array)) {
+            // Plain object - check if keys look like integers
+            const keys = Object.keys(value);
+            const allIntKeys = keys.every(k => !isNaN(parseInt(k, 10)) && String(parseInt(k, 10)) === k);
+            if (allIntKeys && keys.length > 0) {
+                // Convert to Map and encode with integer keys
+                const map = new Map();
+                for (const k of keys) {
+                    map.set(parseInt(k, 10), value[k]);
+                }
+                return this._encodeMapWithIntegerKeys(map);
+            }
+            // Regular object encoding
+            return new Uint8Array(CBOR.encode(value));
+        }
+        // Primitive value
+        return new Uint8Array(CBOR.encode(value));
+    }
+
+    /**
      * Convert JavaScript Map to plain object recursively
      * CBOR.encode() doesn't support Map objects
      */
@@ -577,12 +711,21 @@ export class WebSerialManager extends EventTarget {
         let payload;
         if (patch instanceof Uint8Array) {
             payload = patch;
+        } else if (patch instanceof Map) {
+            // CORECONF requires integer SID keys - use manual encoding
+            console.log(`[iPatch] Encoding Map with integer keys...`);
+            payload = this._encodeMapWithIntegerKeys(patch);
         } else {
-            // Convert Map to plain object for CBOR encoding
-            const plainObj = this._mapToPlainObject(patch);
-            console.log(`[iPatch] Plain object:`, plainObj);
-            const encoded = CBOR.encode(plainObj);
-            payload = new Uint8Array(encoded);
+            // Plain object - check if it has integer-like keys
+            const keys = Object.keys(patch);
+            const allIntKeys = keys.length > 0 && keys.every(k => !isNaN(parseInt(k, 10)) && String(parseInt(k, 10)) === k);
+            if (allIntKeys) {
+                console.log(`[iPatch] Converting object to Map with integer keys...`);
+                payload = this._encodeValueWithIntegerKeys(patch);
+            } else {
+                const encoded = CBOR.encode(patch);
+                payload = new Uint8Array(encoded);
+            }
         }
         const totalSize = payload.length;
 
@@ -629,7 +772,7 @@ export class WebSerialManager extends EventTarget {
 
             const coapOptions = [
                 { number: OptionNumber.URI_PATH, value: 'c' },
-                { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_INSTANCES_CBOR },
+                { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_DATA_CBOR_SID },
                 { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_DATA_CBOR_SID },
                 block1Option
             ];

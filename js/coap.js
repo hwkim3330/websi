@@ -289,9 +289,9 @@ export function buildiFetchRequest(query, options = {}) {
 /**
  * Build iPATCH request
  * contentFormat options:
- *   - 140: yang-data+cbor-sid (YANG_DATA_CBOR_SID)
+ *   - 140: yang-data+cbor-sid (YANG_DATA_CBOR_SID) [default for SID-based iPATCH]
  *   - 141: yang-identifiers+cbor (YANG_IDENTIFIERS_CBOR)
- *   - 142: yang-instances+cbor (YANG_INSTANCES_CBOR) [default]
+ *   - 142: yang-instances+cbor (YANG_INSTANCES_CBOR)
  */
 export function buildiPatchRequest(patch, options = {}) {
     let payload;
@@ -302,11 +302,10 @@ export function buildiPatchRequest(patch, options = {}) {
         payload = new Uint8Array(encoded);
     }
 
-    // Content-Format 142 (yang-instances+cbor) required for iPatch
-    // Error 4.15 = Unsupported Content-Format if wrong
+    // Content-Format 140 (yang-data+cbor-sid) for SID-based iPATCH (RFC 9254)
     const contentFormat = options.contentFormat !== undefined
         ? options.contentFormat
-        : ContentFormat.YANG_INSTANCES_CBOR;
+        : ContentFormat.YANG_DATA_CBOR_SID;
 
     return buildMessage({
         type: MessageType.CON,
