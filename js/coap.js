@@ -302,10 +302,11 @@ export function buildiPatchRequest(patch, options = {}) {
         payload = new Uint8Array(encoded);
     }
 
-    // Allow customizing content format - default to 140 (yang-data+cbor-sid)
+    // Content-Format 142 (yang-instances+cbor) required for iPatch
+    // Error 4.15 = Unsupported Content-Format if wrong
     const contentFormat = options.contentFormat !== undefined
         ? options.contentFormat
-        : ContentFormat.YANG_DATA_CBOR_SID;
+        : ContentFormat.YANG_INSTANCES_CBOR;
 
     return buildMessage({
         type: MessageType.CON,
