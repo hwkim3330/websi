@@ -772,7 +772,7 @@ export class WebSerialManager extends EventTarget {
 
             const coapOptions = [
                 { number: OptionNumber.URI_PATH, value: 'c' },
-                { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_DATA_CBOR_SID },
+                { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_INSTANCES_CBOR },
                 { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_DATA_CBOR_SID },
                 block1Option
             ];

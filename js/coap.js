@@ -302,10 +302,10 @@ export function buildiPatchRequest(patch, options = {}) {
         payload = new Uint8Array(encoded);
     }
 
-    // Content-Format 140 (yang-data+cbor-sid) for SID-based iPATCH (RFC 9254)
+    // Content-Format 142 (yang-instances+cbor) for VelocityDRIVE iPATCH
     const contentFormat = options.contentFormat !== undefined
         ? options.contentFormat
-        : ContentFormat.YANG_DATA_CBOR_SID;
+        : ContentFormat.YANG_INSTANCES_CBOR;
 
     return buildMessage({
         type: MessageType.CON,
