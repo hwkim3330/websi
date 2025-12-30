@@ -49,6 +49,7 @@ let interfaces = [];
 let yangData = {};
 let prevStats = {};
 let pollInterval = null;
+let isFetching = false;  // Prevent concurrent fetch requests
 
 // Chart data history
 const MAX_HISTORY = 60;
@@ -314,6 +315,13 @@ function formatNumber(num) {
 
 // Fetch interfaces
 async function fetchInterfaces() {
+    // Prevent concurrent fetch requests (Block2 transfer takes multiple round trips)
+    if (isFetching) {
+        console.log('[TSN] Skipping fetch - previous request still in progress');
+        return;
+    }
+
+    isFetching = true;
     try {
         const response = await serialManager.sendiFetchRequest(SID.INTERFACES);
         if (response.isSuccess() && response.payload) {
@@ -323,6 +331,8 @@ async function fetchInterfaces() {
         }
     } catch (error) {
         console.error('Failed to fetch interfaces:', error);
+    } finally {
+        isFetching = false;
     }
 }
 
@@ -534,15 +544,24 @@ function loadTasConfig(ifIndex) {
 
 // Fetch PTP status
 async function fetchPtpStatus() {
+    // Share the same busy flag to prevent concurrent requests
+    if (isFetching) {
+        console.log('[TSN] Skipping PTP fetch - previous request still in progress');
+        return;
+    }
+
+    isFetching = true;
     try {
         const response = await serialManager.sendiFetchRequest(SID.PTP);
         if (response.isSuccess() && response.payload) {
             const raw = response.getPayloadAsCBOR();
             yangData.ptp = decodeDeltaSids(raw, 0);
-            elements.ptpState.textContent = 'Active';
+            if (elements.ptpState) elements.ptpState.textContent = 'Active';
         }
     } catch (error) {
-        elements.ptpState.textContent = 'Not configured';
+        if (elements.ptpState) elements.ptpState.textContent = 'Not configured';
+    } finally {
+        isFetching = false;
     }
 }
 
@@ -631,14 +650,14 @@ async function applyCbsConfig() {
     showToast('CBS 설정은 아직 구현 중입니다', 'info');
 }
 
-// Start polling
+// Start polling (2 seconds to allow Block2 transfers to complete)
 function startPolling() {
     if (pollInterval) return;
     pollInterval = setInterval(async () => {
-        if (serialManager.isConnected && serialManager.boardReady) {
+        if (serialManager.isConnected && serialManager.boardReady && !isFetching) {
             await fetchInterfaces();
         }
-    }, 1000);
+    }, 2000);
 }
 
 function stopPolling() {
