@@ -300,6 +300,9 @@ export class WebSerialManager extends EventTarget {
     /**
      * Send iFETCH request with Block2 response support
      * Compatible with LAN9662/LAN9692 VelocityDRIVE-SP boards
+     *
+     * IMPORTANT: Include Block2 in initial request to request small block size
+     * Default server block size may exceed MUP1 frame limit
      */
     async sendiFetchRequest(query, options = {}) {
         if (!this.isConnected) {
@@ -318,12 +321,28 @@ export class WebSerialManager extends EventTarget {
             Math.floor(Math.random() * 256)
         ]);
 
-        // Initial request WITHOUT Block2 (let server decide)
+        // SZX=2 → 64 bytes (very safe for MUP1)
+        // SZX=3 → 128 bytes
+        // SZX=4 → 256 bytes
+        const szx = options.blockSize !== undefined ? options.blockSize : 2;
+
+        // Initial request WITH Block2 to request small block size (RFC 7959 Section 2.3)
         const initialMessageId = Math.floor(Math.random() * 65536);
-        const coapFrame = buildiFetchRequest(query, {
+        const block2Value = encodeBlock2Value(0, false, szx);
+
+        const coapFrame = buildMessage({
+            type: MessageType.CON,
+            code: MethodCode.FETCH,
             messageId: initialMessageId,
             token,
-            ...options
+            options: [
+                { number: OptionNumber.URI_PATH, value: 'c' },
+                { number: OptionNumber.URI_QUERY, value: 'd=a' },
+                { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
+                { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
+                { number: OptionNumber.BLOCK2, value: block2Value }
+            ],
+            payload: new Uint8Array(CBOR.encode(query))
         });
 
         const firstResponse = await this._sendRequest(coapFrame, initialMessageId);

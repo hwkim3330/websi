@@ -252,13 +252,20 @@ async function fetchSystemInfo() {
         const response = await serialManager.sendiFetchRequest(19024);
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            const decoded = decodeDeltaSids(data, 19024);
+            // Top-level keys are absolute SIDs (delta from 0)
+            const decoded = decodeDeltaSids(data, 0);
+            console.log('System info decoded:', decoded);
 
-            if (decoded['os-name']) {
-                elements.platformValue.textContent = decoded['os-name'];
+            // Look for platform info in the decoded data
+            // The structure might be: { "platform": { "os-name": ..., "os-version": ... } }
+            // or nested under SID 19024 key
+            const platform = decoded['platform'] || decoded;
+
+            if (platform['os-name']) {
+                elements.platformValue.textContent = platform['os-name'];
             }
-            if (decoded['os-version']) {
-                elements.versionValue.textContent = decoded['os-version'];
+            if (platform['os-version']) {
+                elements.versionValue.textContent = platform['os-version'];
             }
         }
     } catch (error) {
@@ -280,7 +287,9 @@ async function fetchPath(path) {
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            const decoded = decodeDeltaSids(data, query);
+            // CORECONF response: top-level keys are absolute SIDs (delta from 0)
+            // So we start with parentSid=0, not the query SID
+            const decoded = decodeDeltaSids(data, 0);
             elements.fetchResult.textContent = JSON.stringify(decoded, null, 2);
         } else {
             elements.fetchResult.textContent = `// Error: ${response.code}`;
