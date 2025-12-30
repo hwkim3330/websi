@@ -415,14 +415,27 @@ serialManager.addEventListener('disconnected', () => {
     addTerminalLine(`[${formatTimestamp()}] 시리얼 포트 연결 해제됨`, 'system');
 });
 
-serialManager.addEventListener('announce', (e) => {
+serialManager.addEventListener('announce', async (e) => {
     console.log('Board ready');
     updateConnectionUI(true, true);
-    showToast('보드 연결 완료!', 'success');
     addTerminalLine(`[${formatTimestamp()}] ANNOUNCE 수신 - 보드 준비 완료`, 'info');
 
-    // Try to fetch system info
-    fetchSystemInfo();
+    // Auto-initialize: checksum → catalog → system info
+    try {
+        addTerminalLine(`[${formatTimestamp()}] 자동 초기화 시작...`, 'system');
+
+        // 1. Fetch checksum and download catalog
+        await fetchChecksum();
+
+        // 2. Fetch system info
+        await fetchSystemInfo();
+
+        showToast('보드 초기화 완료!', 'success');
+    } catch (error) {
+        console.error('Auto-init error:', error);
+        addTerminalLine(`[${formatTimestamp()}] 초기화 실패: ${error.message}`, 'error');
+        showToast('초기화 실패 - 수동으로 시도해 주세요', 'warning');
+    }
 });
 
 serialManager.addEventListener('tx', (e) => {
