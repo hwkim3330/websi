@@ -13,15 +13,13 @@ const SID = {
     SYSTEM_STATE: 19020,
     SYSTEM_STATE_PLATFORM: 19024,
 
-    // Interfaces
+    // Interfaces (use smaller queries)
     INTERFACES: 2005,
     INTERFACE_LIST: 2033,
     INTERFACE_NAME: 2042,
     INTERFACE_ENABLED: 2036,
-    INTERFACE_OPER_STATUS: 2043,
-    INTERFACE_PHYS_ADDR: 2044,
 
-    // Bridge port
+    // Bridge port statistics (fetch directly)
     BRIDGE_PORT: 7163,
     BRIDGE_PORT_STATISTICS: 7224,
     STATISTICS_FRAME_RX: 7232,
@@ -29,15 +27,26 @@ const SID = {
     STATISTICS_OCTETS_RX: 7235,
     STATISTICS_OCTETS_TX: 7236,
 
-    // TAS (Qbv)
+    // TAS (Qbv) - Port level scheduling
     GATE_PARAMETER_TABLE: 23101,
+    GATE_ADMIN_BASE_TIME: 23102,
+    GATE_ADMIN_BASE_TIME_NS: 23103,
+    GATE_ADMIN_BASE_TIME_SEC: 23104,
+    GATE_ADMIN_CONTROL_LIST: 23105,
+    GATE_CONTROL_ENTRY: 23106,
+    GATE_ADMIN_CYCLE_TIME: 23111,
+    GATE_CYCLE_NUMERATOR: 23114,
+    GATE_CYCLE_DENOMINATOR: 23113,
+    GATE_ADMIN_GATE_STATES: 23115,
+    GATE_CONFIG_CHANGE: 23116,
     GATE_ENABLED: 23125,
-    ADMIN_GATE_STATES: 23115,
-    ADMIN_CYCLE_TIME: 23111,
-    ADMIN_CYCLE_TIME_NUMERATOR: 23114,
-    ADMIN_CYCLE_TIME_DENOMINATOR: 23113,
-    CONFIG_CHANGE: 23116,
-    OPER_GATE_STATES: 23139,
+    GATE_OPER_GATE_STATES: 23139,
+
+    // CBS (Qav) - Credit Based Shaper
+    TRAFFIC_CLASS_SHAPERS: 8051,
+    SHAPER_TRAFFIC_CLASS: 8052,
+    SHAPER_CBS: 8053,
+    SHAPER_IDLE_SLOPE: 8054,
 
     // PTP
     PTP: 15076,
@@ -49,7 +58,7 @@ let interfaces = [];
 let yangData = {};
 let prevStats = {};
 let pollInterval = null;
-let isFetching = false;  // Prevent concurrent requests
+let isFetching = false;
 
 // Chart data history
 const MAX_HISTORY = 60;
@@ -149,7 +158,6 @@ function initCharts() {
         }
     };
 
-    // Packet Chart
     const packetCtx = $('packetChart')?.getContext('2d');
     if (packetCtx) {
         packetChart = new Chart(packetCtx, {
@@ -181,7 +189,6 @@ function initCharts() {
         });
     }
 
-    // Throughput Chart
     const throughputCtx = $('throughputChart')?.getContext('2d');
     if (throughputCtx) {
         throughputChart = new Chart(throughputCtx, {
@@ -215,15 +222,16 @@ function initCharts() {
 }
 
 function showLoading(text = '로딩 중...') {
-    elements.loadingText.textContent = text;
-    elements.loadingOverlay.classList.add('active');
+    if (elements.loadingText) elements.loadingText.textContent = text;
+    if (elements.loadingOverlay) elements.loadingOverlay.classList.add('active');
 }
 
 function hideLoading() {
-    elements.loadingOverlay.classList.remove('active');
+    if (elements.loadingOverlay) elements.loadingOverlay.classList.remove('active');
 }
 
 function showToast(message, type = 'info') {
+    if (!elements.toastContainer) return;
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
@@ -346,8 +354,6 @@ function parseInterfaces() {
     interfacesList.forEach((iface, index) => {
         const name = iface[SID.INTERFACE_NAME] || `eth${index}`;
         const enabled = iface[SID.INTERFACE_ENABLED] !== false;
-        const operStatus = iface[SID.INTERFACE_OPER_STATUS];
-        const physAddr = iface[SID.INTERFACE_PHYS_ADDR];
 
         // Bridge port stats
         const bridgePort = iface[SID.BRIDGE_PORT] || {};
@@ -358,8 +364,7 @@ function parseInterfaces() {
             index,
             name,
             enabled,
-            operStatus: operStatus === 1 ? 'up' : 'down',
-            physAddr: formatMac(physAddr),
+            operStatus: 'up',
             stats: {
                 frameRx: stats[SID.STATISTICS_FRAME_RX] || 0,
                 frameTx: stats[SID.STATISTICS_FRAME_TX] || 0,
@@ -367,8 +372,8 @@ function parseInterfaces() {
                 octetsTx: stats[SID.STATISTICS_OCTETS_TX] || 0
             },
             gateEnabled: gateParams[SID.GATE_ENABLED] || false,
-            gateStates: gateParams[SID.OPER_GATE_STATES] || 0xFF,
-            cycleTime: gateParams[SID.ADMIN_CYCLE_TIME] || {}
+            gateStates: gateParams[SID.GATE_OPER_GATE_STATES] || 0xFF,
+            cycleTime: gateParams[SID.GATE_ADMIN_CYCLE_TIME] || {}
         });
     });
 
@@ -383,6 +388,7 @@ function formatMac(bytes) {
 }
 
 function renderInterfaces() {
+    if (!elements.interfaceList) return;
     elements.interfaceList.innerHTML = '';
 
     if (interfaces.length === 0) {
@@ -391,15 +397,14 @@ function renderInterfaces() {
     }
 
     interfaces.forEach(iface => {
-        // Calculate rates
         const prev = prevStats[iface.name] || iface.stats;
-        const rxRate = iface.stats.octetsRx - prev.octetsRx;
-        const txRate = iface.stats.octetsTx - prev.octetsTx;
+        const rxRate = Math.max(0, iface.stats.octetsRx - prev.octetsRx);
+        const txRate = Math.max(0, iface.stats.octetsTx - prev.octetsTx);
 
         const item = document.createElement('div');
         item.className = 'interface-item';
         item.innerHTML = `
-            <div class="interface-icon ${iface.operStatus}">
+            <div class="interface-icon ${iface.enabled ? 'up' : 'down'}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="1" y="4" width="22" height="16" rx="2"/>
                     <path d="M1 10h22"/>
@@ -418,26 +423,14 @@ function renderInterfaces() {
                     <span class="rate-item tx">↑ ${formatRate(txRate)}</span>
                 </div>
             </div>
-            <label class="interface-toggle">
-                <input type="checkbox" ${iface.enabled ? 'checked' : ''} data-iface="${iface.index}">
-                <span class="toggle-slider"></span>
-            </label>
         `;
 
-        const toggle = item.querySelector('input[type="checkbox"]');
-        toggle.addEventListener('change', async () => {
-            await setInterfaceEnabled(iface.index, toggle.checked);
-        });
-
         elements.interfaceList.appendChild(item);
-
-        // Store current stats for next rate calculation
         prevStats[iface.name] = { ...iface.stats };
     });
 }
 
 function updateStats() {
-    // Calculate totals
     let totalRx = 0, totalTx = 0, totalRxBytes = 0, totalTxBytes = 0;
     let rxRate = 0, txRate = 0, rxBytesRate = 0, txBytesRate = 0;
 
@@ -449,23 +442,22 @@ function updateStats() {
 
         const prev = prevStats[iface.name];
         if (prev) {
-            rxRate += iface.stats.frameRx - prev.frameRx;
-            txRate += iface.stats.frameTx - prev.frameTx;
-            rxBytesRate += iface.stats.octetsRx - prev.octetsRx;
-            txBytesRate += iface.stats.octetsTx - prev.octetsTx;
+            rxRate += Math.max(0, iface.stats.frameRx - prev.frameRx);
+            txRate += Math.max(0, iface.stats.frameTx - prev.frameTx);
+            rxBytesRate += Math.max(0, iface.stats.octetsRx - prev.octetsRx);
+            txBytesRate += Math.max(0, iface.stats.octetsTx - prev.octetsTx);
         }
     });
 
-    // Update stat cards
-    elements.totalRxPackets.textContent = formatNumber(totalRx);
-    elements.totalTxPackets.textContent = formatNumber(totalTx);
-    elements.totalRxBytes.innerHTML = formatBytes(totalRxBytes);
-    elements.totalTxBytes.innerHTML = formatBytes(totalTxBytes);
+    if (elements.totalRxPackets) elements.totalRxPackets.textContent = formatNumber(totalRx);
+    if (elements.totalTxPackets) elements.totalTxPackets.textContent = formatNumber(totalTx);
+    if (elements.totalRxBytes) elements.totalRxBytes.innerHTML = formatBytes(totalRxBytes);
+    if (elements.totalTxBytes) elements.totalTxBytes.innerHTML = formatBytes(totalTxBytes);
 
-    elements.rxPacketsRate.textContent = `+${formatNumber(rxRate)} pps`;
-    elements.txPacketsRate.textContent = `+${formatNumber(txRate)} pps`;
-    elements.rxBytesRate.textContent = `+${formatRate(rxBytesRate)}`;
-    elements.txBytesRate.textContent = `+${formatRate(txBytesRate)}`;
+    if (elements.rxPacketsRate) elements.rxPacketsRate.textContent = `+${formatNumber(rxRate)} pps`;
+    if (elements.txPacketsRate) elements.txPacketsRate.textContent = `+${formatNumber(txRate)} pps`;
+    if (elements.rxBytesRate) elements.rxBytesRate.textContent = `+${formatRate(rxBytesRate)}`;
+    if (elements.txBytesRate) elements.txBytesRate.textContent = `+${formatRate(txBytesRate)}`;
 
     // Update charts
     const now = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -476,7 +468,6 @@ function updateStats() {
     chartHistory.rxMbps.push((rxBytesRate * 8) / 1000000);
     chartHistory.txMbps.push((txBytesRate * 8) / 1000000);
 
-    // Limit history
     if (chartHistory.labels.length > MAX_HISTORY) {
         chartHistory.labels.shift();
         chartHistory.rxPackets.shift();
@@ -485,7 +476,6 @@ function updateStats() {
         chartHistory.txMbps.shift();
     }
 
-    // Update packet chart
     if (packetChart) {
         packetChart.data.labels = chartHistory.labels;
         packetChart.data.datasets[0].data = chartHistory.rxPackets;
@@ -493,7 +483,6 @@ function updateStats() {
         packetChart.update('none');
     }
 
-    // Update throughput chart
     if (throughputChart) {
         throughputChart.data.labels = chartHistory.labels;
         throughputChart.data.datasets[0].data = chartHistory.rxMbps;
@@ -507,46 +496,47 @@ function populateInterfaceSelects() {
         `<option value="${iface.index}">${iface.name}</option>`
     ).join('');
 
-    elements.tasInterface.innerHTML = '<option value="">선택하세요</option>' + options;
-    elements.cbsInterface.innerHTML = '<option value="">선택하세요</option>' + options;
+    if (elements.tasInterface) {
+        elements.tasInterface.innerHTML = '<option value="">선택하세요</option>' + options;
+        elements.tasInterface.addEventListener('change', () => {
+            if (elements.tasApplyBtn) elements.tasApplyBtn.disabled = !elements.tasInterface.value;
+            if (elements.tasInterface.value) {
+                loadTasConfig(parseInt(elements.tasInterface.value));
+            }
+        });
+    }
 
-    elements.tasInterface.addEventListener('change', () => {
-        elements.tasApplyBtn.disabled = !elements.tasInterface.value;
-        if (elements.tasInterface.value) {
-            loadTasConfig(parseInt(elements.tasInterface.value));
-        }
-    });
-
-    elements.cbsInterface.addEventListener('change', () => {
-        elements.cbsApplyBtn.disabled = !elements.cbsInterface.value;
-    });
+    if (elements.cbsInterface) {
+        elements.cbsInterface.innerHTML = '<option value="">선택하세요</option>' + options;
+        elements.cbsInterface.addEventListener('change', () => {
+            if (elements.cbsApplyBtn) elements.cbsApplyBtn.disabled = !elements.cbsInterface.value;
+        });
+    }
 }
 
 function loadTasConfig(ifIndex) {
     const iface = interfaces[ifIndex];
     if (!iface) return;
 
-    elements.tasGateEnable.checked = iface.gateEnabled;
+    if (elements.tasGateEnable) elements.tasGateEnable.checked = iface.gateEnabled;
 
     const cycleTime = iface.cycleTime;
-    const numerator = cycleTime[SID.ADMIN_CYCLE_TIME_NUMERATOR] || 1000000;
-    const denominator = cycleTime[SID.ADMIN_CYCLE_TIME_DENOMINATOR] || 1;
-    elements.tasCycleTime.value = Math.floor(numerator / denominator);
+    const numerator = cycleTime[SID.GATE_CYCLE_NUMERATOR] || 1000000;
+    const denominator = cycleTime[SID.GATE_CYCLE_DENOMINATOR] || 1;
+    if (elements.tasCycleTime) elements.tasCycleTime.value = Math.floor(numerator / denominator);
 
-    // Update gate visual
-    const bits = elements.gateVisual.querySelectorAll('.gate-bit');
-    bits.forEach((bit, i) => {
-        const isOpen = (iface.gateStates >> i) & 1;
-        bit.classList.toggle('open', isOpen);
-    });
+    const bits = elements.gateVisual?.querySelectorAll('.gate-bit');
+    if (bits) {
+        bits.forEach((bit, i) => {
+            const isOpen = (iface.gateStates >> i) & 1;
+            bit.classList.toggle('open', isOpen);
+        });
+    }
 }
 
 // Fetch PTP status
 async function fetchPtpStatus() {
-    if (isFetching) {
-        console.log('[TSN] Request already in progress, skipping PTP...');
-        return;
-    }
+    if (isFetching) return;
 
     isFetching = true;
     try {
@@ -563,99 +553,128 @@ async function fetchPtpStatus() {
     }
 }
 
-// Set interface enabled
-async function setInterfaceEnabled(ifIndex, enabled) {
-    showLoading();
-    try {
-        const iface = interfaces[ifIndex];
-        const entry = new Map();
-        entry.set(9, iface.name);
-        entry.set(3, enabled);
-
-        const patch = new Map();
-        patch.set(28, [entry]);
-
-        const response = await serialManager.sendiPatchRequest(patch);
-
-        if (response.isSuccess()) {
-            showToast(`${iface.name} ${enabled ? '활성화' : '비활성화'} 완료`, 'success');
-            await fetchInterfaces();
-        } else {
-            showToast(`설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
-        }
-    } catch (error) {
-        showToast(`오류: ${error.message}`, 'error');
-    }
-    hideLoading();
-}
-
-// Apply TAS config
+// Apply TAS config using iPatch
 async function applyTasConfig() {
-    const ifIndex = parseInt(elements.tasInterface.value);
+    const ifIndex = parseInt(elements.tasInterface?.value);
     if (isNaN(ifIndex)) return;
 
-    showLoading();
+    showLoading('TAS 설정 적용 중...');
     try {
         const iface = interfaces[ifIndex];
-        const gateEnabled = elements.tasGateEnable.checked;
-        const cycleTime = parseInt(elements.tasCycleTime.value) || 1000000;
+        const gateEnabled = elements.tasGateEnable?.checked || false;
+        const cycleTimeNs = parseInt(elements.tasCycleTime?.value) || 1000000;
 
         // Get gate states from visual
         let gateStates = 0;
-        elements.gateVisual.querySelectorAll('.gate-bit').forEach((bit, i) => {
+        elements.gateVisual?.querySelectorAll('.gate-bit').forEach((bit, i) => {
             if (bit.classList.contains('open')) {
                 gateStates |= (1 << i);
             }
         });
 
+        // Build iPatch payload with delta-SIDs
+        // Path: /ietf-interfaces:interfaces/interface[name]/bridge-port/gate-parameter-table
         const gateParams = new Map();
-        gateParams.set(24, gateEnabled);  // gate-enabled
-        gateParams.set(14, gateStates);   // admin-gate-states
+        gateParams.set(SID.GATE_ENABLED - SID.GATE_PARAMETER_TABLE, gateEnabled);  // gate-enabled
+        gateParams.set(SID.GATE_ADMIN_GATE_STATES - SID.GATE_PARAMETER_TABLE, gateStates);  // admin-gate-states
 
+        // Cycle time as rational
         const cycleTimeMap = new Map();
-        cycleTimeMap.set(3, cycleTime);
-        cycleTimeMap.set(2, 1);
-        gateParams.set(10, cycleTimeMap);
-        gateParams.set(15, true);  // config-change
+        cycleTimeMap.set(SID.GATE_CYCLE_NUMERATOR - SID.GATE_ADMIN_CYCLE_TIME, cycleTimeNs);
+        cycleTimeMap.set(SID.GATE_CYCLE_DENOMINATOR - SID.GATE_ADMIN_CYCLE_TIME, 1);
+        gateParams.set(SID.GATE_ADMIN_CYCLE_TIME - SID.GATE_PARAMETER_TABLE, cycleTimeMap);
 
+        // Config change to apply
+        gateParams.set(SID.GATE_CONFIG_CHANGE - SID.GATE_PARAMETER_TABLE, true);
+
+        // Bridge port container
         const bridgePort = new Map();
-        bridgePort.set(15938, gateParams);
+        bridgePort.set(SID.GATE_PARAMETER_TABLE - SID.BRIDGE_PORT, gateParams);
 
+        // Interface entry with name key
         const ifaceEntry = new Map();
-        ifaceEntry.set(9, iface.name);
-        ifaceEntry.set(5130, bridgePort);
+        ifaceEntry.set(SID.INTERFACE_NAME - SID.INTERFACE_LIST, iface.name);
+        ifaceEntry.set(SID.BRIDGE_PORT - SID.INTERFACE_LIST, bridgePort);
 
+        // Root patch - interface list delta from interfaces
         const patch = new Map();
-        patch.set(28, [ifaceEntry]);
+        patch.set(SID.INTERFACE_LIST - SID.INTERFACES, [ifaceEntry]);
 
         console.log('Sending TAS patch:', patch);
         const response = await serialManager.sendiPatchRequest(patch);
 
         if (response.isSuccess()) {
             showToast('TAS 설정 적용 완료', 'success');
+            await new Promise(resolve => setTimeout(resolve, 1000));
             await fetchInterfaces();
         } else {
             showToast(`TAS 설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
         }
     } catch (error) {
+        console.error('TAS config error:', error);
         showToast(`오류: ${error.message}`, 'error');
     }
     hideLoading();
 }
 
-// Apply CBS config
+// Apply CBS config using iPatch
 async function applyCbsConfig() {
-    showToast('CBS 설정은 아직 구현 중입니다', 'info');
+    const ifIndex = parseInt(elements.cbsInterface?.value);
+    if (isNaN(ifIndex)) return;
+
+    showLoading('CBS 설정 적용 중...');
+    try {
+        const iface = interfaces[ifIndex];
+        const trafficClass = parseInt(elements.cbsTrafficClass?.value) || 6;
+        const idleSlope = parseInt(elements.cbsIdleSlope?.value) || 5000000;  // 5 Mbps default
+
+        // Build iPatch payload
+        // Path: /ietf-interfaces:interfaces/interface[name]/eth-qos/config/traffic-class-shapers
+        const cbsConfig = new Map();
+        cbsConfig.set(SID.SHAPER_IDLE_SLOPE - SID.SHAPER_CBS, idleSlope);
+
+        const shaperType = new Map();
+        shaperType.set(SID.SHAPER_CBS - SID.TRAFFIC_CLASS_SHAPERS, cbsConfig);
+
+        const shaperEntry = new Map();
+        shaperEntry.set(SID.SHAPER_TRAFFIC_CLASS - SID.TRAFFIC_CLASS_SHAPERS, trafficClass);
+        shaperEntry.set(2, shaperType);  // type container
+
+        // Interface entry
+        const ifaceEntry = new Map();
+        ifaceEntry.set(SID.INTERFACE_NAME - SID.INTERFACE_LIST, iface.name);
+        // eth-qos path (need to find correct SID)
+        // For now, use relative offset
+        ifaceEntry.set(SID.TRAFFIC_CLASS_SHAPERS - SID.INTERFACE_LIST, [shaperEntry]);
+
+        const patch = new Map();
+        patch.set(SID.INTERFACE_LIST - SID.INTERFACES, [ifaceEntry]);
+
+        console.log('Sending CBS patch:', patch);
+        const response = await serialManager.sendiPatchRequest(patch);
+
+        if (response.isSuccess()) {
+            showToast('CBS 설정 적용 완료', 'success');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await fetchInterfaces();
+        } else {
+            showToast(`CBS 설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
+        }
+    } catch (error) {
+        console.error('CBS config error:', error);
+        showToast(`오류: ${error.message}`, 'error');
+    }
+    hideLoading();
 }
 
-// Start polling (5 seconds to allow block transfers to complete)
+// Start polling (10 seconds to allow block transfers to complete)
 function startPolling() {
     if (pollInterval) return;
     pollInterval = setInterval(async () => {
         if (serialManager.isConnected && serialManager.boardReady && !isFetching) {
             await fetchInterfaces();
         }
-    }, 5000);
+    }, 10000);
 }
 
 function stopPolling() {
@@ -666,7 +685,7 @@ function stopPolling() {
 }
 
 // Event listeners
-elements.connectBtn.addEventListener('click', async () => {
+elements.connectBtn?.addEventListener('click', async () => {
     try {
         if (serialManager.isConnected) {
             stopPolling();
@@ -679,20 +698,19 @@ elements.connectBtn.addEventListener('click', async () => {
     }
 });
 
-elements.refreshBtn.addEventListener('click', async () => {
+elements.refreshBtn?.addEventListener('click', async () => {
     if (serialManager.isConnected && serialManager.boardReady && !isFetching) {
         showLoading('새로고침...');
         await fetchInterfaces();
-        // Wait between requests
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await fetchPtpStatus();
         hideLoading();
         showToast('새로고침 완료', 'success');
     }
 });
 
-elements.tasApplyBtn.addEventListener('click', applyTasConfig);
-elements.cbsApplyBtn.addEventListener('click', applyCbsConfig);
+elements.tasApplyBtn?.addEventListener('click', applyTasConfig);
+elements.cbsApplyBtn?.addEventListener('click', applyCbsConfig);
 
 serialManager.addEventListener('disconnected', () => {
     stopPolling();
@@ -704,7 +722,7 @@ serialManager.addEventListener('announce', async () => {
     updateConnectionUI(true);
     showToast('보드 연결됨', 'success');
 
-    // Wait for board state to stabilize (clear any pending block transfers)
+    // Wait for board state to stabilize
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     showLoading('데이터 로딩...');
@@ -715,7 +733,6 @@ serialManager.addEventListener('announce', async () => {
         showToast('데이터 로드 실패 - 새로고침 버튼을 눌러주세요', 'error');
     }
 
-    // Wait between requests to avoid block transfer conflicts
     await new Promise(resolve => setTimeout(resolve, 1000));
     try {
         await fetchPtpStatus();
