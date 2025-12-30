@@ -525,39 +525,17 @@ const yangCatalog = {
 
     // Download YANG catalog from Microchip servers
     async download(checksumHex) {
-        // Microchip YANG catalog sources
+        // Note: Microchip servers may not have CORS enabled, so built-in mappings are used as fallback
+        // HTTPS sources (S3 website endpoint doesn't support HTTPS, so we skip it)
         const sources = [
-            `http://mscc-ent-open-source.s3-website-eu-west-1.amazonaws.com/public_root/velocitydrivesp/yang-by-sha/${checksumHex}.tar.gz`,
-            `https://artifacts.microchip.com/artifactory/UNGE-generic-local/lmstax/yang-by-sha/${checksumHex}.tar.gz`
+            // GitHub mirror might exist
+            `https://raw.githubusercontent.com/nicholascw/MCHP-yang/main/${checksumHex}/sid-index.json`
         ];
 
         try {
-            // Try to fetch from Microchip S3 (may fail due to CORS)
-            let tarData = null;
-
-            for (const url of sources) {
-                try {
-                    console.log(`Trying to fetch from: ${url}`);
-                    const response = await fetch(url);
-                    if (response.ok) {
-                        tarData = await response.arrayBuffer();
-                        console.log(`Downloaded ${tarData.byteLength} bytes from ${url}`);
-                        break;
-                    }
-                } catch (e) {
-                    console.log(`Failed to fetch from ${url}:`, e.message);
-                }
-            }
-
-            if (tarData) {
-                // Would need to extract tar.gz in browser - complex
-                // For now, mark as downloaded but use built-in mappings
-                console.log('YANG catalog tar downloaded, but extraction not implemented in browser');
-                console.log('Using built-in SID mappings instead');
-            }
-
-            // Since browser can't easily extract tar.gz, use pre-built mappings
-            // Try to load from a JSON endpoint or use defaults
+            // Browser can't download tar.gz from Microchip servers (CORS/Mixed Content)
+            // Use built-in SID mappings instead
+            console.log(`Loading built-in SID mappings for checksum: ${checksumHex}`);
             await this.loadBuiltInMappings(checksumHex);
 
             this.checksum = checksumHex;
@@ -565,7 +543,7 @@ const yangCatalog = {
             console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
             return true;
         } catch (error) {
-            console.error('Failed to download YANG catalog:', error);
+            console.error('Failed to load YANG catalog:', error);
             return false;
         }
     },
