@@ -175,6 +175,88 @@ function stringifyCbor(data) {
     return JSON.stringify(formatted, null, 2);
 }
 
+// Delta-SID to human-readable path decoder
+const sidToName = {
+    // ietf-system
+    19017: 'system',
+    19018: 'contact',
+    19019: 'hostname',
+    19020: 'system-state',
+    19021: 'location',
+    19022: 'clock',
+    19023: 'boot-datetime',
+    19024: 'platform',
+    19025: 'machine',
+    19026: 'os-name',
+    19027: 'os-release',
+    19028: 'os-version',
+    19029: 'current-datetime',
+    // ietf-interfaces
+    2005: 'interfaces',
+    2006: 'admin-status',
+    2010: 'enabled',
+    2019: 'name',
+    2020: 'oper-status',
+    2022: 'statistics',
+    2029: 'type',
+    2033: 'interface',
+    // ieee802-dot1q-bridge
+    7025: 'bridges',
+    7026: 'bridge',
+    7027: 'address',
+    7030: 'bridge-type',
+    7031: 'component',
+    7042: 'name',
+    // yang-library
+    29304: 'yang-library',
+    29305: 'checksum',
+    29269: 'modules-state'
+};
+
+// Decode delta-SID CBOR to human-readable format
+function decodeDeltaSid(data, parentSid = null) {
+    if (data instanceof Map) {
+        const obj = {};
+        for (const [key, value] of data) {
+            const absoluteSid = parentSid !== null ? parentSid + key : key;
+            const name = sidToName[absoluteSid] || `sid:${absoluteSid}`;
+            obj[name] = decodeDeltaSid(value, absoluteSid);
+        }
+        return obj;
+    }
+
+    if (Array.isArray(data)) {
+        return data.map(item => decodeDeltaSid(item, parentSid));
+    }
+
+    if (data instanceof Uint8Array) {
+        return '0x' + Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    if (typeof data === 'object' && data !== null) {
+        const obj = {};
+        for (const [key, value] of Object.entries(data)) {
+            const numKey = parseInt(key);
+            if (!isNaN(numKey)) {
+                const absoluteSid = parentSid !== null ? parentSid + numKey : numKey;
+                const name = sidToName[absoluteSid] || `sid:${absoluteSid}`;
+                obj[name] = decodeDeltaSid(value, absoluteSid);
+            } else {
+                obj[key] = decodeDeltaSid(value, parentSid);
+            }
+        }
+        return obj;
+    }
+
+    return data;
+}
+
+// Format CBOR with optional delta-SID decoding
+function formatCborWithNames(data) {
+    const decoded = decodeDeltaSid(formatCborResult(data));
+    return JSON.stringify(decoded, null, 2);
+}
+
 function updateConnectionUI(connected, ready = false) {
     if (connected) {
         elements.connectionStatus.classList.add('connected');
@@ -294,9 +376,10 @@ async function fetchSystemInfo() {
     // Official SIDs from Microchip YANG catalog:
     // /ietf-system:system-state/platform = 19024
     // /ietf-system:system-state = 19020
+    // Note: iFETCH query is just the SID number, NOT an array
     const sidQueries = [
-        { sid: [19024], name: 'platform' },
-        { sid: [19020], name: 'system-state' }
+        { sid: 19024, name: 'platform' },
+        { sid: 19020, name: 'system-state' }
     ];
 
     for (const { sid, name } of sidQueries) {
@@ -362,7 +445,7 @@ async function fetchSystemInfo() {
 elements.getChecksumBtn?.addEventListener('click', async () => {
     try {
         showLoading('체크섬 조회 중...');
-        const query = [29304];
+        const query = 29304; // yang-library SID (not array)
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
@@ -453,12 +536,12 @@ elements.getConfigBtn?.addEventListener('click', async () => {
 elements.fetchSystemBtn?.addEventListener('click', async () => {
     try {
         showLoading('시스템 정보 조회 중...');
-        const query = [19020]; // /ietf-system:system-state
+        const query = 19020; // /ietf-system:system-state (not array)
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = stringifyCbor(data);
+            elements.fetchResult.textContent = formatCborWithNames(data);
             document.querySelector('[data-panel="config"]').click();
             showToast('시스템 정보 조회 완료', 'success');
         }
@@ -472,12 +555,12 @@ elements.fetchSystemBtn?.addEventListener('click', async () => {
 elements.fetchBridgeBtn?.addEventListener('click', async () => {
     try {
         showLoading('브릿지 정보 조회 중...');
-        const query = [7025]; // /ieee802-dot1q-bridge:bridges
+        const query = 7025; // /ieee802-dot1q-bridge:bridges (not array)
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = stringifyCbor(data);
+            elements.fetchResult.textContent = formatCborWithNames(data);
             document.querySelector('[data-panel="config"]').click();
             showToast('브릿지 정보 조회 완료', 'success');
         }
@@ -501,11 +584,12 @@ elements.fetchBtn?.addEventListener('click', async () => {
 
         // Convert path to SID query using YANG catalog
         const query = pathToSidQuery(path);
+        console.log(`Fetching path: ${path} -> query:`, query);
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = stringifyCbor(data);
+            elements.fetchResult.textContent = formatCborWithNames(data);
             showToast('조회 완료', 'success');
         } else {
             elements.fetchResult.textContent = `// 응답 코드: ${response.getCodeClass()}.${response.getCodeDetail()}`;
@@ -690,29 +774,45 @@ const defaultSidMap = {
 };
 
 // Path to SID conversion
+// Returns: number (single SID) or array [SID, key1, key2, ...] for list entries
 function pathToSidQuery(path) {
+    // Check for list key notation: path[key='value']
+    const listMatch = path.match(/^(.+)\[([^=]+)='([^']+)'\]$/);
+    if (listMatch) {
+        const basePath = listMatch[1];
+        const keyValue = listMatch[3];
+        const sid = getSidForPath(basePath);
+        if (sid) {
+            return [sid, keyValue]; // Array for list entry
+        }
+    }
+
+    // Simple path - return just the SID number
+    const sid = getSidForPath(path);
+    return sid || 19020; // Default to system-state
+}
+
+// Helper to get SID for a path
+function getSidForPath(path) {
     // Try YANG catalog first
     if (yangCatalog.loaded) {
         const sid = yangCatalog.getSid(path);
-        if (sid) {
-            return [sid];
-        }
+        if (sid) return sid;
     }
 
     // Check default mappings
     for (const [p, sid] of Object.entries(defaultSidMap)) {
         if (path.startsWith(p) || path === p) {
-            return [sid];
+            return sid;
         }
     }
 
     // Try to parse as numeric SID
     if (/^\d+$/.test(path)) {
-        return [parseInt(path)];
+        return parseInt(path);
     }
 
-    // Default to system-state (official SID)
-    return [19020];
+    return null;
 }
 
 // Store current checksum for YANG download
