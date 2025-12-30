@@ -1,5 +1,6 @@
 /**
- * VelocityDRIVE-SP WebSerial Application
+ * VelocityDRIVE-SP YANG Browser
+ * Registry Editor style tree view for YANG data
  */
 
 import { WebSerialManager } from './webserial.js';
@@ -13,61 +14,43 @@ const yangCatalog = {
     checksum: null
 };
 
+// Root YANG modules to fetch
+const ROOT_MODULES = [
+    { name: 'system', sid: 19020, path: '/ietf-system:system-state' },
+    { name: 'interfaces', sid: 2005, path: '/ietf-interfaces:interfaces' },
+    { name: 'bridges', sid: 7025, path: '/ieee802-dot1q-bridge:bridges' }
+];
+
+// Tree data store
+let yangData = {};
+let selectedNode = null;
+
 // DOM Elements
 const $ = id => document.getElementById(id);
 
 const elements = {
     connectBtn: $('connectBtn'),
-    connectionBadge: $('connectionBadge'),
-    statusValue: $('statusValue'),
-    platformValue: $('platformValue'),
-    versionValue: $('versionValue'),
-    yangValue: $('yangValue'),
-    portGrid: $('portGrid'),
-
-    getChecksumBtn: $('getChecksumBtn'),
-    fetchSystemBtn: $('fetchSystemBtn'),
-    fetchBridgeBtn: $('fetchBridgeBtn'),
-    fetchInterfacesBtn: $('fetchInterfacesBtn'),
-
-    yangPathInput: $('yangPathInput'),
-    fetchBtn: $('fetchBtn'),
-    fetchResult: $('fetchResult'),
-    copyResultBtn: $('copyResultBtn'),
-
-    applyCbsBtn: $('applyCbsBtn'),
-    applyTasBtn: $('applyTasBtn'),
-    applyPtpBtn: $('applyPtpBtn'),
-
+    refreshBtn: $('refreshBtn'),
+    statusBar: $('statusBar'),
+    statusText: $('statusText'),
+    platformInfo: $('platformInfo'),
+    treeContainer: $('treeContainer'),
+    currentPath: $('currentPath'),
+    valueTableBody: $('valueTableBody'),
+    copyPathBtn: $('copyPathBtn'),
+    copyValueBtn: $('copyValueBtn'),
     terminalOutput: $('terminalOutput'),
     clearTerminalBtn: $('clearTerminalBtn'),
-    autoScrollCheck: $('autoScrollCheck'),
+    toggleTerminalBtn: $('toggleTerminalBtn'),
     showHexCheck: $('showHexCheck'),
-
+    expandAllBtn: $('expandAllBtn'),
     loadingOverlay: $('loadingOverlay'),
     loadingText: $('loadingText'),
     toastContainer: $('toastContainer')
 };
 
-// Tabs
-document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        $(tab.dataset.tab + 'Tab').classList.add('active');
-    });
-});
-
-// Path buttons
-document.querySelectorAll('.path-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        elements.yangPathInput.value = btn.dataset.path;
-    });
-});
-
 // Utilities
-function showLoading(text = '처리 중...') {
+function showLoading(text = '로딩 중...') {
     elements.loadingText.textContent = text;
     elements.loadingOverlay.classList.add('active');
 }
@@ -79,62 +62,39 @@ function hideLoading() {
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `<span class="toast-message">${message}</span>`;
+    toast.textContent = message;
     elements.toastContainer.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
 }
 
-function formatTimestamp() {
-    return new Date().toLocaleTimeString('ko-KR', { hour12: false });
-}
-
-function addTerminalLine(text, type = 'system') {
+function log(message, type = 'system') {
     const line = document.createElement('div');
-    line.className = `terminal-line ${type}`;
-    line.textContent = text;
+    line.className = `log-line ${type}`;
+    line.textContent = `[${new Date().toLocaleTimeString('ko-KR', { hour12: false })}] ${message}`;
     elements.terminalOutput.appendChild(line);
-    if (elements.autoScrollCheck?.checked) {
-        elements.terminalOutput.scrollTop = elements.terminalOutput.scrollHeight;
-    }
+    elements.terminalOutput.scrollTop = elements.terminalOutput.scrollHeight;
 }
 
-function updateConnectionUI(connected, ready = false) {
-    if (connected && ready) {
-        elements.connectionBadge.className = 'connection-badge connected';
-        elements.connectionBadge.querySelector('.badge-text').textContent = '연결됨';
-        elements.connectBtn.querySelector('span').textContent = '연결 해제';
-        elements.statusValue.textContent = '연결됨';
-        elements.statusValue.className = 'status-value status-connected';
-    } else if (connected) {
-        elements.connectionBadge.className = 'connection-badge connecting';
-        elements.connectionBadge.querySelector('.badge-text').textContent = '연결 중...';
-        elements.statusValue.textContent = '연결 중...';
+function updateConnectionUI(connected) {
+    if (connected) {
+        elements.statusBar.classList.add('connected');
+        elements.statusText.textContent = '연결됨';
+        elements.connectBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg> 연결 해제';
+        elements.refreshBtn.disabled = false;
     } else {
-        elements.connectionBadge.className = 'connection-badge';
-        elements.connectionBadge.querySelector('.badge-text').textContent = '연결 안됨';
-        elements.connectBtn.querySelector('span').textContent = '연결';
-        elements.statusValue.textContent = '대기 중';
-        elements.statusValue.className = 'status-value status-disconnected';
-        elements.platformValue.textContent = '-';
-        elements.versionValue.textContent = '-';
-        elements.yangValue.textContent = '-';
+        elements.statusBar.classList.remove('connected');
+        elements.statusText.textContent = '연결 안됨';
+        elements.platformInfo.textContent = '-';
+        elements.connectBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5"/></svg> 연결';
+        elements.refreshBtn.disabled = true;
+        elements.treeContainer.innerHTML = '<div class="tree-placeholder">보드에 연결하면<br>YANG 데이터가 표시됩니다</div>';
+        yangData = {};
     }
-
-    // Enable/disable buttons
-    const btns = [
-        elements.getChecksumBtn, elements.fetchSystemBtn,
-        elements.fetchBridgeBtn, elements.fetchInterfacesBtn,
-        elements.fetchBtn, elements.applyCbsBtn,
-        elements.applyTasBtn, elements.applyPtpBtn
-    ];
-    btns.forEach(btn => {
-        if (btn) btn.disabled = !(connected && ready);
-    });
 }
 
 // YANG Catalog
 async function loadYangCatalog(checksumHex) {
-    console.log(`Loading YANG SID catalog for checksum: ${checksumHex}`);
+    log(`YANG 카탈로그 로딩: ${checksumHex}`, 'info');
     try {
         const response = await fetch(`./js/catalogs/${checksumHex}.json`);
         if (!response.ok) throw new Error('Catalog not found');
@@ -147,29 +107,12 @@ async function loadYangCatalog(checksumHex) {
             Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v])
         );
         yangCatalog.checksum = checksumHex;
-        console.log(`Loaded ${yangCatalog.sidToPath.size} SID mappings`);
-        elements.yangValue.textContent = checksumHex.substring(0, 8) + '...';
+        log(`카탈로그 로드 완료: ${yangCatalog.sidToPath.size}개 SID`, 'success');
         return true;
     } catch (error) {
-        console.error('Failed to load catalog:', error);
+        log(`카탈로그 로드 실패: ${error.message}`, 'error');
         return false;
     }
-}
-
-function pathToSidQuery(path) {
-    // Try direct SID lookup
-    if (yangCatalog.sidMap.has(path)) {
-        return yangCatalog.sidMap.get(path);
-    }
-    // Common SID mappings
-    const commonSids = {
-        '/ietf-system:system-state': 19020,
-        '/ietf-system:system-state/platform': 19024,
-        '/ietf-interfaces:interfaces': 2005,
-        '/ieee802-dot1q-bridge:bridges': 7025,
-        '/ieee1588-ptp:ptp': 8000
-    };
-    return commonSids[path] || null;
 }
 
 function getSidName(sid) {
@@ -217,9 +160,249 @@ function decodeDeltaSids(data, parentSid) {
     return data;
 }
 
-// API Functions
+// Tree View Functions
+function getValueType(value) {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
+}
+
+function getTypeLabel(value) {
+    const type = getValueType(value);
+    if (type === 'array') return `Array[${value.length}]`;
+    if (type === 'object') return 'Object';
+    return type;
+}
+
+function isExpandable(value) {
+    return value !== null && typeof value === 'object';
+}
+
+function createTreeNode(name, value, path, depth = 0) {
+    const node = document.createElement('div');
+    node.className = 'tree-node';
+    node.dataset.path = path;
+
+    const header = document.createElement('div');
+    header.className = 'tree-node-header';
+    header.style.paddingLeft = `${depth * 20 + 4}px`;
+
+    // Toggle arrow
+    const toggle = document.createElement('span');
+    toggle.className = 'tree-toggle';
+    if (isExpandable(value)) {
+        toggle.classList.add('collapsed');
+    } else {
+        toggle.classList.add('empty');
+    }
+    header.appendChild(toggle);
+
+    // Icon
+    const icon = document.createElement('span');
+    icon.className = 'tree-icon';
+    if (Array.isArray(value)) {
+        icon.classList.add('list');
+        icon.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/></svg>';
+    } else if (typeof value === 'object' && value !== null) {
+        icon.classList.add('container');
+        icon.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9z"/></svg>';
+    } else {
+        icon.classList.add('leaf');
+        icon.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5z"/></svg>';
+    }
+    header.appendChild(icon);
+
+    // Name
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'tree-node-name';
+    nameSpan.textContent = name;
+    header.appendChild(nameSpan);
+
+    // Badge for arrays/objects
+    if (Array.isArray(value)) {
+        const badge = document.createElement('span');
+        badge.className = 'tree-node-badge';
+        badge.textContent = `${value.length}`;
+        header.appendChild(badge);
+    } else if (typeof value === 'object' && value !== null) {
+        const badge = document.createElement('span');
+        badge.className = 'tree-node-badge';
+        badge.textContent = `${Object.keys(value).length}`;
+        header.appendChild(badge);
+    }
+
+    node.appendChild(header);
+
+    // Children container
+    if (isExpandable(value)) {
+        const children = document.createElement('div');
+        children.className = 'tree-children';
+
+        if (Array.isArray(value)) {
+            value.forEach((item, index) => {
+                children.appendChild(createTreeNode(`[${index}]`, item, `${path}[${index}]`, depth + 1));
+            });
+        } else {
+            Object.entries(value).forEach(([key, val]) => {
+                children.appendChild(createTreeNode(key, val, `${path}/${key}`, depth + 1));
+            });
+        }
+
+        node.appendChild(children);
+
+        // Toggle click handler
+        header.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isExpanded = toggle.classList.contains('expanded');
+            if (isExpanded) {
+                toggle.classList.remove('expanded');
+                toggle.classList.add('collapsed');
+                children.classList.remove('expanded');
+            } else {
+                toggle.classList.remove('collapsed');
+                toggle.classList.add('expanded');
+                children.classList.add('expanded');
+            }
+            selectNode(node, name, value, path);
+        });
+    } else {
+        header.addEventListener('click', () => {
+            selectNode(node, name, value, path);
+        });
+    }
+
+    return node;
+}
+
+function selectNode(node, name, value, path) {
+    // Deselect previous
+    document.querySelectorAll('.tree-node-header.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
+
+    // Select new
+    node.querySelector('.tree-node-header').classList.add('selected');
+    selectedNode = { name, value, path };
+
+    // Update path display
+    elements.currentPath.textContent = path || '/';
+
+    // Update value table
+    updateValueTable(value);
+}
+
+function updateValueTable(data) {
+    elements.valueTableBody.innerHTML = '';
+
+    if (data === null || data === undefined) {
+        elements.valueTableBody.innerHTML = '<tr class="placeholder-row"><td colspan="3">값 없음</td></tr>';
+        return;
+    }
+
+    if (typeof data !== 'object') {
+        // Primitive value
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td class="name-cell">(value)</td>
+            <td class="type-cell">${typeof data}</td>
+            <td class="value-cell ${typeof data}">${formatValue(data)}</td>
+        `;
+        elements.valueTableBody.appendChild(row);
+        return;
+    }
+
+    if (Array.isArray(data)) {
+        data.forEach((item, index) => {
+            const row = document.createElement('tr');
+            const type = getValueType(item);
+            row.innerHTML = `
+                <td class="name-cell">[${index}]</td>
+                <td class="type-cell">${getTypeLabel(item)}</td>
+                <td class="value-cell ${type}">${formatValue(item)}</td>
+            `;
+            elements.valueTableBody.appendChild(row);
+        });
+    } else {
+        Object.entries(data).forEach(([key, value]) => {
+            const row = document.createElement('tr');
+            const type = getValueType(value);
+            row.innerHTML = `
+                <td class="name-cell">${escapeHtml(key)}</td>
+                <td class="type-cell">${getTypeLabel(value)}</td>
+                <td class="value-cell ${type}">${formatValue(value)}</td>
+            `;
+            elements.valueTableBody.appendChild(row);
+        });
+    }
+
+    if (elements.valueTableBody.children.length === 0) {
+        elements.valueTableBody.innerHTML = '<tr class="placeholder-row"><td colspan="3">빈 객체</td></tr>';
+    }
+}
+
+function formatValue(value) {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+    if (typeof value === 'string') return `"${escapeHtml(value)}"`;
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return `[${value.length} items]`;
+    if (typeof value === 'object') return `{${Object.keys(value).length} properties}`;
+    return String(value);
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderTree() {
+    elements.treeContainer.innerHTML = '';
+
+    if (Object.keys(yangData).length === 0) {
+        elements.treeContainer.innerHTML = '<div class="tree-placeholder">데이터 없음</div>';
+        return;
+    }
+
+    Object.entries(yangData).forEach(([name, data]) => {
+        const node = createTreeNode(name, data, `/${name}`, 0);
+        elements.treeContainer.appendChild(node);
+    });
+}
+
+// Data Fetching
+async function fetchAllData() {
+    showLoading('YANG 데이터 로딩 중...');
+    yangData = {};
+
+    for (const module of ROOT_MODULES) {
+        try {
+            log(`Fetching ${module.name} (SID: ${module.sid})...`, 'info');
+            const response = await serialManager.sendiFetchRequest(module.sid);
+
+            if (response.isSuccess() && response.payload) {
+                const raw = response.getPayloadAsCBOR();
+                const decoded = decodeDeltaSids(raw, 0);
+                yangData[module.name] = decoded;
+                log(`${module.name} 로드 완료`, 'success');
+            }
+        } catch (error) {
+            log(`${module.name} 로드 실패: ${error.message}`, 'error');
+        }
+    }
+
+    renderTree();
+    hideLoading();
+
+    if (Object.keys(yangData).length > 0) {
+        showToast('YANG 데이터 로드 완료', 'success');
+    }
+}
+
 async function fetchChecksum() {
-    showLoading('체크섬 조회 중...');
     try {
         const query = [29304];
         const response = await serialManager.sendiFetchRequest(query);
@@ -236,14 +419,10 @@ async function fetchChecksum() {
 
             if (checksumHex) {
                 await loadYangCatalog(checksumHex);
-                showToast('YANG 카탈로그 로드 완료', 'success');
             }
         }
     } catch (error) {
-        console.error('Checksum fetch error:', error);
-        addTerminalLine(`체크섬 조회 실패: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
+        log(`체크섬 조회 실패: ${error.message}`, 'error');
     }
 }
 
@@ -251,98 +430,57 @@ async function fetchSystemInfo() {
     try {
         const response = await serialManager.sendiFetchRequest(19024);
         if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            // Top-level keys are absolute SIDs (delta from 0)
-            const decoded = decodeDeltaSids(data, 0);
-            console.log('System info decoded:', decoded);
+            const raw = response.getPayloadAsCBOR();
+            const decoded = decodeDeltaSids(raw, 0);
 
-            // Look for platform info in the decoded data
-            // The structure might be: { "platform": { "os-name": ..., "os-version": ... } }
-            // or nested under SID 19024 key
             const platform = decoded['platform'] || decoded;
-
-            if (platform['os-name']) {
-                elements.platformValue.textContent = platform['os-name'];
-            }
-            if (platform['os-version']) {
-                elements.versionValue.textContent = platform['os-version'];
+            if (platform['os-name'] && platform['os-version']) {
+                elements.platformInfo.textContent = `${platform['os-name']} ${platform['os-version']}`;
             }
         }
     } catch (error) {
-        console.error('System info error:', error);
-    }
-}
-
-async function fetchPath(path) {
-    showLoading('조회 중...');
-    try {
-        const query = pathToSidQuery(path);
-        if (!query) {
-            elements.fetchResult.textContent = `// SID를 찾을 수 없습니다: ${path}`;
-            return;
-        }
-
-        addTerminalLine(`Fetching: ${path} (SID: ${query})`, 'info');
-        const response = await serialManager.sendiFetchRequest(query);
-
-        if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            // CORECONF response: top-level keys are absolute SIDs (delta from 0)
-            // So we start with parentSid=0, not the query SID
-            const decoded = decodeDeltaSids(data, 0);
-            elements.fetchResult.textContent = JSON.stringify(decoded, null, 2);
-        } else {
-            elements.fetchResult.textContent = `// Error: ${response.code}`;
-        }
-    } catch (error) {
-        elements.fetchResult.textContent = `// Error: ${error.message}`;
-        addTerminalLine(`조회 실패: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
+        log(`시스템 정보 조회 실패: ${error.message}`, 'error');
     }
 }
 
 // Event Handlers
 serialManager.addEventListener('connected', () => {
-    console.log('Connected');
-    updateConnectionUI(true, false);
-    addTerminalLine(`[${formatTimestamp()}] 시리얼 포트 연결됨`, 'info');
+    log('시리얼 포트 연결됨', 'info');
 });
 
 serialManager.addEventListener('disconnected', () => {
-    console.log('Disconnected');
+    log('연결 해제됨', 'system');
     updateConnectionUI(false);
-    addTerminalLine(`[${formatTimestamp()}] 연결 해제됨`, 'system');
 });
 
 serialManager.addEventListener('announce', async () => {
-    console.log('Board ready');
-    updateConnectionUI(true, true);
-    addTerminalLine(`[${formatTimestamp()}] ANNOUNCE - 보드 준비 완료`, 'info');
+    log('ANNOUNCE 수신 - 보드 준비 완료', 'success');
+    updateConnectionUI(true);
 
-    // Auto-init
+    showLoading('초기화 중...');
     try {
         await fetchChecksum();
         await fetchSystemInfo();
-        showToast('보드 초기화 완료!', 'success');
+        await fetchAllData();
     } catch (error) {
-        console.error('Auto-init error:', error);
+        log(`초기화 오류: ${error.message}`, 'error');
+        hideLoading();
     }
 });
 
 serialManager.addEventListener('trace', (e) => {
-    addTerminalLine(`TRACE: ${e.detail.error}`, 'error');
+    log(`TRACE: ${e.detail.error}`, 'error');
 });
 
 serialManager.addEventListener('tx', (e) => {
     if (elements.showHexCheck?.checked) {
-        addTerminalLine(`TX: ${e.detail.hex}`, 'tx');
+        log(`TX: ${e.detail.hex}`, 'tx');
     }
 });
 
 serialManager.addEventListener('rx', (e) => {
     if (elements.showHexCheck?.checked) {
-        addTerminalLine(`RX: ${e.detail.hex}`, 'rx');
+        log(`RX: ${e.detail.hex}`, 'rx');
     }
 });
 
@@ -352,43 +490,54 @@ elements.connectBtn.addEventListener('click', async () => {
         if (serialManager.isConnected) {
             await serialManager.disconnect();
         } else {
-            elements.connectionBadge.className = 'connection-badge connecting';
-            elements.connectionBadge.querySelector('.badge-text').textContent = '연결 중...';
             await serialManager.connect();
         }
     } catch (error) {
-        console.error('Connection error:', error);
+        log(`연결 오류: ${error.message}`, 'error');
         showToast(error.message, 'error');
         updateConnectionUI(false);
     }
 });
 
-elements.getChecksumBtn?.addEventListener('click', fetchChecksum);
-elements.fetchSystemBtn?.addEventListener('click', () => fetchPath('/ietf-system:system-state/platform'));
-elements.fetchBridgeBtn?.addEventListener('click', () => fetchPath('/ieee802-dot1q-bridge:bridges'));
-elements.fetchInterfacesBtn?.addEventListener('click', () => fetchPath('/ietf-interfaces:interfaces'));
-
-elements.fetchBtn?.addEventListener('click', () => {
-    const path = elements.yangPathInput.value.trim();
-    if (path) fetchPath(path);
-});
-
-elements.yangPathInput?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        const path = elements.yangPathInput.value.trim();
-        if (path) fetchPath(path);
+elements.refreshBtn.addEventListener('click', async () => {
+    if (serialManager.isConnected && serialManager.boardReady) {
+        await fetchAllData();
     }
 });
 
-elements.copyResultBtn?.addEventListener('click', () => {
-    navigator.clipboard.writeText(elements.fetchResult.textContent);
-    showToast('복사됨', 'success');
+elements.clearTerminalBtn.addEventListener('click', () => {
+    elements.terminalOutput.innerHTML = '<div class="log-line info">터미널 클리어</div>';
 });
 
-elements.clearTerminalBtn?.addEventListener('click', () => {
-    elements.terminalOutput.innerHTML = '<div class="terminal-line system">터미널 클리어</div>';
+elements.toggleTerminalBtn.addEventListener('click', () => {
+    const terminal = document.querySelector('.terminal-panel');
+    terminal.classList.toggle('collapsed');
+});
+
+elements.copyPathBtn.addEventListener('click', () => {
+    if (selectedNode) {
+        navigator.clipboard.writeText(selectedNode.path);
+        showToast('경로 복사됨', 'success');
+    }
+});
+
+elements.copyValueBtn.addEventListener('click', () => {
+    if (selectedNode) {
+        navigator.clipboard.writeText(JSON.stringify(selectedNode.value, null, 2));
+        showToast('값 복사됨', 'success');
+    }
+});
+
+elements.expandAllBtn.addEventListener('click', () => {
+    document.querySelectorAll('.tree-toggle.collapsed').forEach(toggle => {
+        toggle.classList.remove('collapsed');
+        toggle.classList.add('expanded');
+    });
+    document.querySelectorAll('.tree-children').forEach(children => {
+        children.classList.add('expanded');
+    });
 });
 
 // Initialize
 updateConnectionUI(false);
-console.log('VelocityDRIVE-SP WebSerial ready');
+log('VelocityDRIVE-SP YANG Browser 준비됨', 'info');
