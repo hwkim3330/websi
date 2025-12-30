@@ -8,6 +8,7 @@ WebSerial 기반 YANG 데이터 브라우저 - Microchip LAN9662/LAN9692 Velocit
 |---------|-----|-------------|
 | **Browser** | [hwkim3330.github.io/websi/](https://hwkim3330.github.io/websi/) | 읽기 전용 YANG 브라우저 |
 | **Editor** | [hwkim3330.github.io/websi/editor.html](https://hwkim3330.github.io/websi/editor.html) | 편집 가능 (iPatch 지원) |
+| **TSN Config** | [hwkim3330.github.io/websi/tsn.html](https://hwkim3330.github.io/websi/tsn.html) | TSN 설정 (TAS/CBS/PTP) |
 | **Mobile** | [hwkim3330.github.io/websi/mobile.html](https://hwkim3330.github.io/websi/mobile.html) | 모바일 최적화 버전 |
 
 ## Features
@@ -111,12 +112,14 @@ VelocityDRIVE-SP는 다음 TSN 표준을 지원합니다:
 websi/
 ├── index.html          # 읽기 전용 YANG 브라우저
 ├── editor.html         # 편집 가능 버전 (iPatch)
+├── tsn.html            # TSN 설정 (TAS/CBS/PTP)
 ├── mobile.html         # 모바일 최적화 버전
 ├── css/
 │   └── style.css       # VS Code 다크 테마
 ├── js/
 │   ├── app.js          # 브라우저 앱 로직
 │   ├── editor.js       # 에디터 앱 로직
+│   ├── tsn.js          # TSN 설정 로직 (iPatch)
 │   ├── mobile.js       # 모바일 앱 로직
 │   ├── webserial.js    # WebSerial + MUP1 + CoAP
 │   ├── coap.js         # CoAP 프로토콜
