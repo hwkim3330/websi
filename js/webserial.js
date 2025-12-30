@@ -321,8 +321,10 @@ export class WebSerialManager extends EventTarget {
                 const isBlockError = error.message.includes('code 130') ||
                                      error.message.includes('code 136');
                 if (isBlockError && attempt < MAX_INITIAL_RETRIES - 1) {
-                    console.warn(`[CoAP] iFETCH attempt ${attempt + 1} failed, retrying after delay...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+                    // Exponential backoff: 2s, 4s, 8s
+                    const delay = 2000 * Math.pow(2, attempt);
+                    console.warn(`[CoAP] iFETCH attempt ${attempt + 1} failed, retrying after ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                     continue;
                 }
                 throw error;
@@ -337,15 +339,20 @@ export class WebSerialManager extends EventTarget {
         const payloads = [];
         let lastResponse = null;
 
-        // Use 4-byte token for better uniqueness
+        // Use 8-byte token for maximum uniqueness to avoid session conflicts
         const token = options.token || new Uint8Array([
+            Math.floor(Math.random() * 256),
+            Math.floor(Math.random() * 256),
+            Math.floor(Math.random() * 256),
+            Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256)
         ]);
 
-        const szx = options.blockSize !== undefined ? options.blockSize : 2;
+        // SZX=1 (32 bytes) is safer for MUP1 frame limit
+        const szx = options.blockSize !== undefined ? options.blockSize : 1;
 
         // Initial request WITH Block2 NUM=0 to request small block size
         const initialMessageId = Math.floor(Math.random() * 65536);

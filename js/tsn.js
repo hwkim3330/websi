@@ -722,10 +722,26 @@ serialManager.addEventListener('announce', async () => {
     updateConnectionUI(true);
     showToast('보드 연결됨', 'success');
 
-    // Wait for board state to stabilize
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for board block transfer state to clear
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     showLoading('데이터 로딩...');
+
+    // First fetch a small SID to reset board state
+    try {
+        console.log('[TSN] Fetching small SID first to reset board state...');
+        const response = await serialManager.sendiFetchRequest(SID.SYSTEM_STATE_PLATFORM);
+        if (response.isSuccess()) {
+            console.log('[TSN] Small SID fetch succeeded, board state should be clean');
+        }
+    } catch (e) {
+        console.warn('[TSN] Small SID fetch failed, continuing anyway:', e.message);
+    }
+
+    // Wait a bit more
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Now fetch interfaces
     try {
         await fetchInterfaces();
     } catch (e) {
