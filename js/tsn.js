@@ -49,6 +49,7 @@ let interfaces = [];
 let yangData = {};
 let prevStats = {};
 let pollInterval = null;
+let isFetching = false;  // Prevent concurrent requests
 
 // Chart data history
 const MAX_HISTORY = 60;
@@ -312,8 +313,14 @@ function formatNumber(num) {
     return num.toString();
 }
 
-// Fetch interfaces
+// Fetch interfaces with lock to prevent concurrent requests
 async function fetchInterfaces() {
+    if (isFetching) {
+        console.log('[TSN] Request already in progress, skipping...');
+        return;
+    }
+
+    isFetching = true;
     try {
         const response = await serialManager.sendiFetchRequest(SID.INTERFACES);
         if (response.isSuccess() && response.payload) {
@@ -323,6 +330,8 @@ async function fetchInterfaces() {
         }
     } catch (error) {
         console.error('Failed to fetch interfaces:', error);
+    } finally {
+        isFetching = false;
     }
 }
 
@@ -534,15 +543,23 @@ function loadTasConfig(ifIndex) {
 
 // Fetch PTP status
 async function fetchPtpStatus() {
+    if (isFetching) {
+        console.log('[TSN] Request already in progress, skipping PTP...');
+        return;
+    }
+
+    isFetching = true;
     try {
         const response = await serialManager.sendiFetchRequest(SID.PTP);
         if (response.isSuccess() && response.payload) {
             const raw = response.getPayloadAsCBOR();
             yangData.ptp = decodeDeltaSids(raw, 0);
-            elements.ptpState.textContent = 'Active';
+            if (elements.ptpState) elements.ptpState.textContent = 'Active';
         }
     } catch (error) {
-        elements.ptpState.textContent = 'Not configured';
+        if (elements.ptpState) elements.ptpState.textContent = 'Not configured';
+    } finally {
+        isFetching = false;
     }
 }
 
@@ -631,14 +648,14 @@ async function applyCbsConfig() {
     showToast('CBS 설정은 아직 구현 중입니다', 'info');
 }
 
-// Start polling
+// Start polling (5 seconds to allow block transfers to complete)
 function startPolling() {
     if (pollInterval) return;
     pollInterval = setInterval(async () => {
-        if (serialManager.isConnected && serialManager.boardReady) {
+        if (serialManager.isConnected && serialManager.boardReady && !isFetching) {
             await fetchInterfaces();
         }
-    }, 1000);
+    }, 5000);
 }
 
 function stopPolling() {
@@ -663,9 +680,11 @@ elements.connectBtn.addEventListener('click', async () => {
 });
 
 elements.refreshBtn.addEventListener('click', async () => {
-    if (serialManager.isConnected && serialManager.boardReady) {
+    if (serialManager.isConnected && serialManager.boardReady && !isFetching) {
         showLoading('새로고침...');
         await fetchInterfaces();
+        // Wait between requests
+        await new Promise(resolve => setTimeout(resolve, 500));
         await fetchPtpStatus();
         hideLoading();
         showToast('새로고침 완료', 'success');
@@ -685,8 +704,14 @@ serialManager.addEventListener('announce', async () => {
     updateConnectionUI(true);
     showToast('보드 연결됨', 'success');
 
+    // Wait a bit for board to be fully ready
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     showLoading('데이터 로딩...');
     await fetchInterfaces();
+
+    // Wait between requests to avoid block transfer conflicts
+    await new Promise(resolve => setTimeout(resolve, 500));
     await fetchPtpStatus();
     hideLoading();
 
