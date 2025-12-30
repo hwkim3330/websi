@@ -705,52 +705,55 @@ const yangCatalog = {
     // Download YANG catalog from Microchip servers
     async download(checksumHex) {
         try {
-            // Try to load from pre-extracted JSON file first
+            // Try to load from pre-extracted catalog file (per-checksum)
             console.log(`Loading YANG SID catalog for checksum: ${checksumHex}`);
 
-            const response = await fetch('./js/yang-sids.json');
+            // Try checksum-specific catalog first
+            let response = await fetch(`./js/catalogs/${checksumHex}.json`);
+
+            // Fallback to legacy single file
+            if (!response.ok) {
+                response = await fetch('./js/yang-sids.json');
+            }
+
             if (response.ok) {
                 const data = await response.json();
 
-                // Verify checksum matches
-                if (data.checksum === checksumHex) {
-                    console.log(`Loaded official Microchip YANG catalog (${checksumHex})`);
-
-                    // Load pathToSid mappings
-                    for (const [path, sid] of Object.entries(data.pathToSid)) {
-                        this.sidMap.set(path, sid);
-
-                        // Also add short name alias
-                        const parts = path.split('/');
-                        const shortName = parts[parts.length - 1];
-                        if (shortName && !shortName.includes(':')) {
-                            this.sidMap.set(shortName, sid);
-                        }
-                    }
-
-                    // Load sidToPath for reverse lookup
-                    if (data.sidToPath) {
-                        this.sidToPath = new Map(Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v]));
-                    }
-
-                    this.checksum = checksumHex;
-                    this.loaded = true;
-                    console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
-                    return true;
-                } else {
+                // Verify checksum matches (for legacy file)
+                if (data.checksum && data.checksum !== checksumHex) {
                     console.warn(`Checksum mismatch: expected ${checksumHex}, got ${data.checksum}`);
+                    throw new Error('Checksum mismatch');
                 }
+
+                console.log(`Loaded official Microchip YANG catalog (${checksumHex})`);
+
+                // Load pathToSid mappings
+                for (const [path, sid] of Object.entries(data.pathToSid)) {
+                    this.sidMap.set(path, sid);
+
+                    // Also add short name alias
+                    const parts = path.split('/');
+                    const shortName = parts[parts.length - 1];
+                    if (shortName && !shortName.includes(':')) {
+                        this.sidMap.set(shortName, sid);
+                    }
+                }
+
+                // Load sidToPath for reverse lookup
+                if (data.sidToPath) {
+                    this.sidToPath = new Map(Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v]));
+                }
+
+                this.checksum = checksumHex;
+                this.loaded = true;
+                console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
+                return true;
             }
 
-            // Fallback to built-in mappings
-            console.log(`Falling back to built-in SID mappings`);
-            await this.loadBuiltInMappings(checksumHex);
-            this.checksum = checksumHex;
-            this.loaded = true;
-            return true;
+            throw new Error('Catalog not found');
         } catch (error) {
-            console.error('Failed to load YANG catalog:', error);
-            // Try built-in as last resort
+            console.warn('Catalog load failed, using built-in mappings:', error.message);
+            // Fallback to built-in mappings
             await this.loadBuiltInMappings(checksumHex);
             this.checksum = checksumHex;
             this.loaded = true;
