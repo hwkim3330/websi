@@ -321,17 +321,14 @@ export class WebSerialManager extends EventTarget {
             Math.floor(Math.random() * 256)
         ]);
 
-        // SZX=2 → 64 bytes (safe for MUP1 frame limit)
-        // SZX=1 → 32 bytes (more conservative)
-        // SZX=0 → 16 bytes (most conservative)
-        const preferredSzx = options.blockSize !== undefined ? options.blockSize : 2;
+        // SZX=2 → 64 bytes (very safe for MUP1)
+        // SZX=3 → 128 bytes
+        // SZX=4 → 256 bytes
+        const szx = options.blockSize !== undefined ? options.blockSize : 2;
 
-        // Initial request WITH Block2 NUM=0 to request small block size
-        // Board firmware requires:
-        // - Initial request: Block2 NUM must be 0
-        // - Continued request: Block2 MUST be present with NUM > 0
+        // Initial request WITH Block2 to request small block size (RFC 7959 Section 2.3)
         const initialMessageId = Math.floor(Math.random() * 65536);
-        const initialBlock2Value = encodeBlock2Value(0, false, preferredSzx);
+        const block2Value = encodeBlock2Value(0, false, szx);
 
         const coapFrame = buildMessage({
             type: MessageType.CON,
@@ -343,7 +340,7 @@ export class WebSerialManager extends EventTarget {
                 { number: OptionNumber.URI_QUERY, value: 'd=a' },
                 { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
                 { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
-                { number: OptionNumber.BLOCK2, value: initialBlock2Value }
+                { number: OptionNumber.BLOCK2, value: block2Value }
             ],
             payload: new Uint8Array(CBOR.encode(query))
         });
@@ -365,73 +362,46 @@ export class WebSerialManager extends EventTarget {
         let blockNum = block2 ? block2.num : 0;
 
         // Fetch remaining blocks if needed
-        const MAX_RETRIES = 3;
         while (more) {
             blockNum++;
 
-            let retries = 0;
-            let blockSuccess = false;
+            const messageId = Math.floor(Math.random() * 65536);
+            const block2Value = encodeBlock2Value(blockNum, false, block2.szx);
+            const block2Option = { number: OptionNumber.BLOCK2, value: block2Value };
 
-            while (retries < MAX_RETRIES && !blockSuccess) {
-                try {
-                    const messageId = Math.floor(Math.random() * 65536);
-                    const block2Value = encodeBlock2Value(blockNum, false, block2.szx);
-                    const block2Option = { number: OptionNumber.BLOCK2, value: block2Value };
+            // Build iFETCH with Block2 option for continuation
+            const continuationFrame = buildMessage({
+                type: MessageType.CON,
+                code: MethodCode.FETCH,
+                messageId,
+                token,
+                options: [
+                    { number: OptionNumber.URI_PATH, value: 'c' },
+                    { number: OptionNumber.URI_QUERY, value: 'd=a' },
+                    { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
+                    { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
+                    block2Option
+                ],
+                payload: new Uint8Array(CBOR.encode(query))
+            });
 
-                    // Build iFETCH with Block2 option for continuation
-                    const continuationFrame = buildMessage({
-                        type: MessageType.CON,
-                        code: MethodCode.FETCH,
-                        messageId,
-                        token,
-                        options: [
-                            { number: OptionNumber.URI_PATH, value: 'c' },
-                            { number: OptionNumber.URI_QUERY, value: 'd=a' },
-                            { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
-                            { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
-                            block2Option
-                        ],
-                        payload: new Uint8Array(CBOR.encode(query))
-                    });
+            const coapResponse = await this._sendRequest(continuationFrame, messageId);
+            lastResponse = coapResponse;
 
-                    // Small delay between blocks to prevent board state issues
-                    if (retries > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 100 * retries));
-                    }
-
-                    const coapResponse = await this._sendRequest(continuationFrame, messageId);
-                    lastResponse = coapResponse;
-
-                    if (!coapResponse.isSuccess()) {
-                        retries++;
-                        console.warn(`Block ${blockNum} failed with code ${coapResponse.code}, retry ${retries}/${MAX_RETRIES}`);
-                        continue;
-                    }
-
-                    if (coapResponse.payload) {
-                        payloads.push(coapResponse.payload);
-                    }
-
-                    const nextBlock2 = coapResponse.getBlock2Value();
-                    if (nextBlock2) {
-                        more = nextBlock2.m;
-                        block2 = nextBlock2;
-                    } else {
-                        more = false;
-                    }
-
-                    blockSuccess = true;
-                } catch (blockError) {
-                    retries++;
-                    console.warn(`Block ${blockNum} error: ${blockError.message}, retry ${retries}/${MAX_RETRIES}`);
-                    if (retries >= MAX_RETRIES) {
-                        throw new Error(`Block ${blockNum} failed after ${MAX_RETRIES} retries: ${blockError.message}`);
-                    }
-                }
+            if (!coapResponse.isSuccess()) {
+                throw new Error(`Block ${blockNum} failed with code ${coapResponse.code}`);
             }
 
-            if (!blockSuccess) {
-                throw new Error(`Block ${blockNum} failed after ${MAX_RETRIES} retries`);
+            if (coapResponse.payload) {
+                payloads.push(coapResponse.payload);
+            }
+
+            const nextBlock2 = coapResponse.getBlock2Value();
+            if (nextBlock2) {
+                more = nextBlock2.m;
+                block2 = nextBlock2;
+            } else {
+                more = false;
             }
         }
 

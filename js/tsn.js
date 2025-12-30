@@ -49,7 +49,6 @@ let interfaces = [];
 let yangData = {};
 let prevStats = {};
 let pollInterval = null;
-let isFetching = false;  // Prevent concurrent fetch requests
 
 // Chart data history
 const MAX_HISTORY = 60;
@@ -315,13 +314,6 @@ function formatNumber(num) {
 
 // Fetch interfaces
 async function fetchInterfaces() {
-    // Prevent concurrent fetch requests (Block2 transfer takes multiple round trips)
-    if (isFetching) {
-        console.log('[TSN] Skipping fetch - previous request still in progress');
-        return;
-    }
-
-    isFetching = true;
     try {
         const response = await serialManager.sendiFetchRequest(SID.INTERFACES);
         if (response.isSuccess() && response.payload) {
@@ -331,8 +323,6 @@ async function fetchInterfaces() {
         }
     } catch (error) {
         console.error('Failed to fetch interfaces:', error);
-    } finally {
-        isFetching = false;
     }
 }
 
@@ -544,24 +534,15 @@ function loadTasConfig(ifIndex) {
 
 // Fetch PTP status
 async function fetchPtpStatus() {
-    // Share the same busy flag to prevent concurrent requests
-    if (isFetching) {
-        console.log('[TSN] Skipping PTP fetch - previous request still in progress');
-        return;
-    }
-
-    isFetching = true;
     try {
         const response = await serialManager.sendiFetchRequest(SID.PTP);
         if (response.isSuccess() && response.payload) {
             const raw = response.getPayloadAsCBOR();
             yangData.ptp = decodeDeltaSids(raw, 0);
-            if (elements.ptpState) elements.ptpState.textContent = 'Active';
+            elements.ptpState.textContent = 'Active';
         }
     } catch (error) {
-        if (elements.ptpState) elements.ptpState.textContent = 'Not configured';
-    } finally {
-        isFetching = false;
+        elements.ptpState.textContent = 'Not configured';
     }
 }
 
@@ -650,14 +631,14 @@ async function applyCbsConfig() {
     showToast('CBS 설정은 아직 구현 중입니다', 'info');
 }
 
-// Start polling (2 seconds to allow Block2 transfers to complete)
+// Start polling
 function startPolling() {
     if (pollInterval) return;
     pollInterval = setInterval(async () => {
-        if (serialManager.isConnected && serialManager.boardReady && !isFetching) {
+        if (serialManager.isConnected && serialManager.boardReady) {
             await fetchInterfaces();
         }
-    }, 2000);
+    }, 1000);
 }
 
 function stopPolling() {
