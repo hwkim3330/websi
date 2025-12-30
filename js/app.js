@@ -125,15 +125,42 @@ function getSidName(sid) {
     return null;
 }
 
+// Try to resolve SID - first as delta, then as absolute
+function resolveSid(key, parentSid) {
+    if (typeof key !== 'number') {
+        return { sid: null, name: String(key) };
+    }
+
+    // Try delta-based SID first
+    const deltaSid = parentSid + key;
+    let name = getSidName(deltaSid);
+    if (name) {
+        return { sid: deltaSid, name };
+    }
+
+    // Try as absolute SID (for augmentations from other modules)
+    name = getSidName(key);
+    if (name) {
+        return { sid: key, name };
+    }
+
+    // Fallback: if delta result is reasonable (positive), use it
+    if (deltaSid > 0 && deltaSid < 100000) {
+        return { sid: deltaSid, name: String(deltaSid) };
+    }
+
+    return { sid: key, name: String(key) };
+}
+
 function decodeDeltaSids(data, parentSid) {
     if (data === null || typeof data !== 'object') return data;
 
     if (data instanceof Map) {
         const result = {};
         for (const [key, value] of data.entries()) {
-            const absoluteSid = typeof key === 'number' ? parentSid + key : key;
-            const name = getSidName(absoluteSid) || String(absoluteSid);
-            result[name] = decodeDeltaSids(value, absoluteSid);
+            const { sid, name } = resolveSid(key, parentSid);
+            const nextParent = sid !== null ? sid : parentSid;
+            result[name] = decodeDeltaSids(value, nextParent);
         }
         return result;
     }
@@ -147,9 +174,9 @@ function decodeDeltaSids(data, parentSid) {
         for (const [key, value] of Object.entries(data)) {
             const numKey = parseInt(key);
             if (!isNaN(numKey)) {
-                const absoluteSid = parentSid + numKey;
-                const name = getSidName(absoluteSid) || String(absoluteSid);
-                result[name] = decodeDeltaSids(value, absoluteSid);
+                const { sid, name } = resolveSid(numKey, parentSid);
+                const nextParent = sid !== null ? sid : parentSid;
+                result[name] = decodeDeltaSids(value, nextParent);
             } else {
                 result[key] = decodeDeltaSids(value, parentSid);
             }
