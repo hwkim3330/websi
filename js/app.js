@@ -133,7 +133,7 @@ function getSidName(sid) {
 }
 
 // Try to resolve SID - first as delta, then as absolute
-function resolveSid(key, parentSid) {
+function resolveSid(key, parentSid, depth = 0) {
     if (typeof key !== 'number') {
         return { sid: null, name: String(key) };
     }
@@ -141,6 +141,11 @@ function resolveSid(key, parentSid) {
     // Try delta-based SID first
     const deltaSid = parentSid + key;
     let name = getSidName(deltaSid);
+
+    // Debug logging
+    const indent = '  '.repeat(depth);
+    console.log(`${indent}[SID] key=${key}, parent=${parentSid}, delta=${deltaSid}, name=${name || 'NOT FOUND'}`);
+
     if (name) {
         return { sid: deltaSid, name };
     }
@@ -148,44 +153,57 @@ function resolveSid(key, parentSid) {
     // Try as absolute SID (for augmentations from other modules)
     name = getSidName(key);
     if (name) {
+        console.log(`${indent}[SID] Found as absolute: ${key} -> ${name}`);
         return { sid: key, name };
     }
 
     // Fallback: if delta result is reasonable (positive), use it
     if (deltaSid > 0 && deltaSid < 100000) {
+        console.log(`${indent}[SID] UNRESOLVED: delta=${deltaSid}`);
         return { sid: deltaSid, name: String(deltaSid) };
     }
 
     return { sid: key, name: String(key) };
 }
 
-function decodeDeltaSids(data, parentSid) {
+function decodeDeltaSids(data, parentSid, depth = 0) {
     if (data === null || typeof data !== 'object') return data;
 
+    const indent = '  '.repeat(depth);
+
     if (data instanceof Map) {
+        console.log(`${indent}[DECODE] Map with ${data.size} entries, parentSid=${parentSid}`);
         const result = {};
         for (const [key, value] of data.entries()) {
-            const { sid, name } = resolveSid(key, parentSid);
+            console.log(`${indent}[DECODE] Map key: ${key} (type: ${typeof key})`);
+            const { sid, name } = resolveSid(key, parentSid, depth);
             const nextParent = sid !== null ? sid : parentSid;
-            result[name] = decodeDeltaSids(value, nextParent);
+            result[name] = decodeDeltaSids(value, nextParent, depth + 1);
         }
         return result;
     }
 
     if (Array.isArray(data)) {
-        return data.map(item => decodeDeltaSids(item, parentSid));
+        console.log(`${indent}[DECODE] Array with ${data.length} items, parentSid=${parentSid}`);
+        return data.map((item, i) => {
+            console.log(`${indent}[DECODE] Array[${i}]`);
+            return decodeDeltaSids(item, parentSid, depth + 1);
+        });
     }
 
     if (typeof data === 'object') {
+        const keys = Object.keys(data);
+        console.log(`${indent}[DECODE] Object with keys: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}, parentSid=${parentSid}`);
         const result = {};
         for (const [key, value] of Object.entries(data)) {
             const numKey = parseInt(key);
             if (!isNaN(numKey)) {
-                const { sid, name } = resolveSid(numKey, parentSid);
+                const { sid, name } = resolveSid(numKey, parentSid, depth);
                 const nextParent = sid !== null ? sid : parentSid;
-                result[name] = decodeDeltaSids(value, nextParent);
+                result[name] = decodeDeltaSids(value, nextParent, depth + 1);
             } else {
-                result[key] = decodeDeltaSids(value, parentSid);
+                console.log(`${indent}[DECODE] Non-numeric key: ${key}`);
+                result[key] = decodeDeltaSids(value, parentSid, depth + 1);
             }
         }
         return result;
