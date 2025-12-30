@@ -16,9 +16,16 @@ const yangCatalog = {
 
 // Root YANG modules to fetch
 const ROOT_MODULES = [
-    { name: 'system', sid: 19020, path: '/ietf-system:system-state' },
+    { name: 'system-state', sid: 19020, path: '/ietf-system:system-state' },
+    { name: 'system', sid: 19017, path: '/ietf-system:system' },
     { name: 'interfaces', sid: 2005, path: '/ietf-interfaces:interfaces' },
-    { name: 'bridges', sid: 7025, path: '/ieee802-dot1q-bridge:bridges' }
+    { name: 'bridges', sid: 7025, path: '/ieee802-dot1q-bridge:bridges' },
+    { name: 'ptp', sid: 15076, path: '/ieee1588-ptp:ptp' },
+    { name: 'lldp', sid: 11001, path: '/ieee802-dot1ab-lldp:lldp' },
+    { name: 'routing', sid: 12010, path: '/ietf-routing:routing' },
+    { name: 'hardware', sid: 31054, path: '/ietf-hardware:hardware' },
+    { name: 'stream-id', sid: 24005, path: '/ieee802-dot1cb-stream-identification:stream-identity' },
+    { name: 'acl', sid: 39008, path: '/mchp-velocitysp-acl:acl' }
 ];
 
 // Tree data store
@@ -459,10 +466,18 @@ async function fetchSystemInfo() {
         if (response.isSuccess() && response.payload) {
             const raw = response.getPayloadAsCBOR();
             const decoded = decodeDeltaSids(raw, 0);
+            console.log('System platform data:', decoded);
 
-            const platform = decoded['platform'] || decoded;
-            if (platform['os-name'] && platform['os-version']) {
-                elements.platformInfo.textContent = `${platform['os-name']} ${platform['os-version']}`;
+            // Try different possible structures
+            let platform = decoded;
+            if (decoded['platform']) platform = decoded['platform'];
+            if (decoded['system-state']) platform = decoded['system-state']['platform'] || decoded['system-state'];
+
+            const osName = platform['os-name'] || platform['machine'] || '';
+            const osVersion = platform['os-version'] || '';
+
+            if (osName || osVersion) {
+                elements.platformInfo.textContent = `${osName} ${osVersion}`.trim();
             }
         }
     } catch (error) {
