@@ -176,8 +176,9 @@ function stringifyCbor(data) {
 }
 
 // Delta-SID to human-readable path decoder
+// Compatible with LAN9662 and LAN9692 boards (VelocityDRIVE-SP)
 const sidToName = {
-    // ietf-system
+    // ietf-system (ietf-system@2014-08-06.sid)
     19017: 'system',
     19018: 'contact',
     19019: 'hostname',
@@ -191,26 +192,101 @@ const sidToName = {
     19027: 'os-release',
     19028: 'os-version',
     19029: 'current-datetime',
-    // ietf-interfaces
+
+    // ietf-interfaces (ietf-interfaces@2018-02-20.sid)
     2005: 'interfaces',
     2006: 'admin-status',
+    2007: 'description',
     2010: 'enabled',
+    2011: 'if-index',
+    2015: 'last-change',
+    2016: 'link-up-down-trap-enable',
     2019: 'name',
     2020: 'oper-status',
+    2021: 'phys-address',
     2022: 'statistics',
+    2023: 'discontinuity-time',
+    2024: 'in-broadcast-pkts',
+    2025: 'in-discards',
+    2026: 'in-errors',
+    2027: 'in-multicast-pkts',
+    2028: 'in-octets',
     2029: 'type',
+    2030: 'in-unicast-pkts',
+    2031: 'in-unknown-protos',
+    2032: 'out-broadcast-pkts',
     2033: 'interface',
-    // ieee802-dot1q-bridge
+    2034: 'out-discards',
+    2035: 'out-errors',
+    2036: 'out-multicast-pkts',
+    2037: 'out-octets',
+    2038: 'out-unicast-pkts',
+    2039: 'speed',
+
+    // ieee802-dot1q-bridge (ieee802-dot1q-bridge@2023-04-17.sid)
     7025: 'bridges',
     7026: 'bridge',
     7027: 'address',
+    7028: 'bridge-port',
+    7029: 'bridge-pvid',
     7030: 'bridge-type',
     7031: 'component',
+    7032: 'filtering-database',
+    7033: 'permanent-database',
+    7034: 'vlan-registration-entry',
     7042: 'name',
-    // yang-library
+    7043: 'num-ports',
+    7044: 'ports',
+    7045: 'port-num',
+    7046: 'port-type',
+
+    // ieee802-dot1q-sched (TAS - ieee802-dot1q-sched@2023-03-16.sid)
+    6003: 'gate-parameters',
+    6004: 'gate-enabled',
+    6005: 'admin-gate-states',
+    6006: 'oper-gate-states',
+    6007: 'admin-control-list',
+    6008: 'oper-control-list',
+    6009: 'admin-cycle-time',
+    6010: 'max-sdu-table',
+    6011: 'max-sdu',
+    6012: 'transmission-overrun',
+
+    // ieee1588-ptp (ieee1588-ptp@2022-08-30.sid)
+    15076: 'ptp',
+    15077: 'common-services',
+    15133: 'instances',
+    15134: 'instance',
+    15152: 'current-ds',
+    15153: 'mean-delay',
+    15154: 'mean-path-delay',
+    15155: 'offset-from-master',
+    15156: 'steps-removed',
+    15158: 'default-ds',
+    15159: 'clock-identity',
+    15167: 'domain-number',
+    15169: 'instance-enable',
+    15173: 'priority1',
+    15174: 'priority2',
+    15206: 'instance-index',
+    15207: 'parent-ds',
+    15212: 'grandmaster-identity',
+    15252: 'ports',
+    15253: 'port',
+
+    // yang-library (ietf-constrained-yang-library)
     29304: 'yang-library',
     29305: 'checksum',
-    29269: 'modules-state'
+    29269: 'modules-state',
+    29270: 'module',
+    29271: 'conformance-type',
+    29272: 'deviation',
+    29273: 'feature',
+    29274: 'module-set-id',
+    29275: 'namespace',
+    29276: 'revision',
+    29277: 'schema',
+    29278: 'submodule'
 };
 
 // Decode delta-SID CBOR to human-readable format
@@ -445,7 +521,8 @@ async function fetchSystemInfo() {
 elements.getChecksumBtn?.addEventListener('click', async () => {
     try {
         showLoading('체크섬 조회 중...');
-        const query = 29304; // yang-library SID (not array)
+        // RFC 9254: iFETCH for yang-library/checksum uses array format
+        const query = [29304]; // yang-library checksum SID (array format per CLI)
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
@@ -754,23 +831,52 @@ const yangCatalog = {
 };
 
 // Built-in SID mappings for common paths (fallback) - Official Microchip values
+// Compatible with LAN9662 and LAN9692 boards
 const defaultSidMap = {
+    // ietf-system
     '/ietf-system:system-state': 19020,
     '/ietf-system:system-state/platform': 19024,
+    '/ietf-system:system-state/clock': 19022,
     '/ietf-system:system': 19017,
-    '/ieee802-dot1q-bridge:bridges': 7025,
+    '/ietf-system:system/hostname': 19019,
+    '/ietf-system:system/contact': 19018,
+
+    // ietf-interfaces
     '/ietf-interfaces:interfaces': 2005,
     '/ietf-interfaces:interfaces/interface': 2033,
+
+    // ieee802-dot1q-bridge
+    '/ieee802-dot1q-bridge:bridges': 7025,
+    '/ieee802-dot1q-bridge:bridges/bridge': 7026,
+
+    // ieee802-dot1q-sched (TAS)
+    '/ieee802-dot1q-sched:gate-parameters': 6003,
+    '/ieee802-dot1q-sched:max-sdu-table': 6010,
+
+    // ieee1588-ptp (PTP)
+    '/ieee1588-ptp:ptp': 15076,
+    '/ieee1588-ptp:ptp/instances': 15133,
+    '/ieee1588-ptp:ptp/instances/instance': 15134,
+
+    // yang-library
     '/ietf-yang-library:yang-library': 29304,
     '/ietf-yang-library:modules-state': 29269,
-    '/ieee1588-ptp:ptp': 15076,
+    '/ietf-constrained-yang-library:yang-library': 29304,
+
+    // Short aliases
     'system-state': 19020,
     'system': 19017,
     'platform': 19024,
+    'clock': 19022,
+    'hostname': 19019,
     'bridges': 7025,
+    'bridge': 7026,
     'interfaces': 2005,
+    'interface': 2033,
     'ptp': 15076,
-    'yang-library': 29304
+    'gate-parameters': 6003,
+    'yang-library': 29304,
+    'checksum': 29305
 };
 
 // Path to SID conversion
