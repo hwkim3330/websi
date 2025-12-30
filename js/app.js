@@ -291,10 +291,12 @@ elements.connectBtn.addEventListener('click', async () => {
 
 // Fetch system info
 async function fetchSystemInfo() {
-    // Try different SIDs: 1717 (platform), 1716 (system-state)
+    // Official SIDs from Microchip YANG catalog:
+    // /ietf-system:system-state/platform = 19024
+    // /ietf-system:system-state = 19020
     const sidQueries = [
-        { sid: [1717], name: 'platform' },
-        { sid: [1716], name: 'system-state' }
+        { sid: [19024], name: 'platform' },
+        { sid: [19020], name: 'system-state' }
     ];
 
     for (const { sid, name } of sidQueries) {
@@ -317,17 +319,17 @@ async function fetchSystemInfo() {
                 }
 
                 // Extract platform info from the response
-                // Response may be {1717: {...}} or {1: "value", 2: "value", ...}
+                // Response may be {19024: {...}} or {delta-sid: "value", ...}
                 let platformData = formatted;
-                if (formatted['1717']) platformData = formatted['1717'];
-                else if (formatted['1716']) platformData = formatted['1716'];
+                if (formatted['19024']) platformData = formatted['19024'];
+                else if (formatted['19020']) platformData = formatted['19020'];
 
                 if (typeof platformData === 'object' && platformData !== null) {
                     // Delta-SID encoding: values are relative to parent SID
-                    // platform (1717): machine=+1(1718), os-name=+2(1719), os-release=+3(1720), os-version=+4(1721)
-                    const osName = platformData['2'] || platformData['1719'] || platformData['os-name'];
-                    const osVersion = platformData['4'] || platformData['1721'] || platformData['os-version'];
-                    const machine = platformData['1'] || platformData['1718'] || platformData['machine'];
+                    // platform (19024): os-name=+2(19026), os-release=+3(19027), os-version=+4(19028), machine=+1(19025)
+                    const osName = platformData['2'] || platformData['19026'] || platformData['os-name'];
+                    const osVersion = platformData['4'] || platformData['19028'] || platformData['os-version'];
+                    const machine = platformData['1'] || platformData['19025'] || platformData['machine'];
 
                     if (osName) elements.platformInfo.textContent = osName;
                     if (osVersion) elements.versionInfo.textContent = osVersion;
@@ -451,7 +453,7 @@ elements.getConfigBtn?.addEventListener('click', async () => {
 elements.fetchSystemBtn?.addEventListener('click', async () => {
     try {
         showLoading('시스템 정보 조회 중...');
-        const query = [1716];
+        const query = [19020]; // /ietf-system:system-state
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
@@ -470,7 +472,7 @@ elements.fetchSystemBtn?.addEventListener('click', async () => {
 elements.fetchBridgeBtn?.addEventListener('click', async () => {
     try {
         showLoading('브릿지 정보 조회 중...');
-        const query = [1523];
+        const query = [7025]; // /ieee802-dot1q-bridge:bridges
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
@@ -550,44 +552,63 @@ const yangCatalog = {
 
     // Load pre-built SID mappings for known checksums
     async loadBuiltInMappings(checksumHex) {
-        // VelocityDRIVE-SP known SID mappings
+        // Official VelocityDRIVE-SP SID mappings from Microchip YANG catalog
         const knownMappings = {
             '5151bae07677b1501f9cf52637f2a38f': {
-                // ietf-system
-                '/ietf-system:system': 1705,
-                '/ietf-system:system/contact': 1706,
-                '/ietf-system:system/hostname': 1707,
-                '/ietf-system:system/location': 1708,
-                '/ietf-system:system-state': 1716,
-                '/ietf-system:system-state/platform': 1717,
-                '/ietf-system:system-state/platform/machine': 1718,
-                '/ietf-system:system-state/platform/os-name': 1719,
-                '/ietf-system:system-state/platform/os-release': 1720,
-                '/ietf-system:system-state/platform/os-version': 1721,
-                '/ietf-system:system-state/clock': 1722,
-                'system': 1705,
-                'system-state': 1716,
-                'platform': 1717,
+                // ietf-system (official SIDs from ietf-system@2014-08-06.sid)
+                '/ietf-system:system': 19017,
+                '/ietf-system:system/contact': 19018,
+                '/ietf-system:system/hostname': 19019,
+                '/ietf-system:system/location': 19021,
+                '/ietf-system:system-state': 19020,
+                '/ietf-system:system-state/platform': 19024,
+                '/ietf-system:system-state/platform/machine': 19025,
+                '/ietf-system:system-state/platform/os-name': 19026,
+                '/ietf-system:system-state/platform/os-release': 19027,
+                '/ietf-system:system-state/platform/os-version': 19028,
+                '/ietf-system:system-state/clock': 19022,
+                '/ietf-system:system-state/clock/boot-datetime': 19023,
+                '/ietf-system:system-state/clock/current-datetime': 19029,
+                'system': 19017,
+                'system-state': 19020,
+                'platform': 19024,
 
-                // ietf-interfaces
-                '/ietf-interfaces:interfaces': 1533,
-                '/ietf-interfaces:interfaces/interface': 1534,
-                '/ietf-interfaces:interfaces-state': 1563,
-                'interfaces': 1533,
-                'interface': 1534,
+                // ietf-interfaces (official SIDs from ietf-interfaces@2018-02-20.sid)
+                '/ietf-interfaces:interfaces': 2005,
+                '/ietf-interfaces:interfaces/interface': 2033,
+                '/ietf-interfaces:interfaces/interface/name': 2019,
+                '/ietf-interfaces:interfaces/interface/enabled': 2010,
+                '/ietf-interfaces:interfaces/interface/type': 2029,
+                '/ietf-interfaces:interfaces/interface/oper-status': 2020,
+                '/ietf-interfaces:interfaces/interface/admin-status': 2006,
+                '/ietf-interfaces:interfaces/interface/statistics': 2022,
+                'interfaces': 2005,
+                'interface': 2033,
 
-                // ieee802-dot1q-bridge
-                '/ieee802-dot1q-bridge:bridges': 1000,
-                '/ieee802-dot1q-bridge:bridges/bridge': 1001,
-                'bridges': 1000,
-                'bridge': 1001,
+                // ieee802-dot1q-bridge (official SIDs from ieee802-dot1q-bridge@2023-04-17.sid)
+                '/ieee802-dot1q-bridge:bridges': 7025,
+                '/ieee802-dot1q-bridge:bridges/bridge': 7026,
+                '/ieee802-dot1q-bridge:bridges/bridge/name': 7042,
+                '/ieee802-dot1q-bridge:bridges/bridge/address': 7027,
+                '/ieee802-dot1q-bridge:bridges/bridge/bridge-type': 7030,
+                '/ieee802-dot1q-bridge:bridges/bridge/component': 7031,
+                'bridges': 7025,
+                'bridge': 7026,
 
-                // ieee802-dot1q-sched (TAS)
-                '/ieee802-dot1q-sched:gate-parameters': 1600,
-                'gate-parameters': 1600,
+                // ieee802-dot1q-sched (TAS) - from ieee802-dot1q-sched@2023-03-16.sid
+                '/ieee802-dot1q-sched:gate-parameters': 6003,
+                '/ieee802-dot1q-sched:max-sdu-table': 6010,
+                'gate-parameters': 6003,
+
+                // ieee1588-ptp (PTP)
+                '/ieee1588-ptp:ptp': 15076,
+                '/ieee1588-ptp:ptp/instances': 15133,
+                '/ieee1588-ptp:ptp/instances/instance': 15134,
+                'ptp': 15076,
 
                 // ietf-yang-library
                 '/ietf-yang-library:yang-library': 29304,
+                '/ietf-yang-library:yang-library/checksum': 29305,
                 '/ietf-yang-library:modules-state': 29269,
                 'yang-library': 29304,
                 'modules-state': 29269
@@ -648,20 +669,23 @@ const yangCatalog = {
     }
 };
 
-// Built-in SID mappings for common paths (fallback)
+// Built-in SID mappings for common paths (fallback) - Official Microchip values
 const defaultSidMap = {
-    '/ietf-system:system-state': 1716,
-    '/ietf-system:system-state/platform': 1716,
-    '/ietf-system:system': 1705,
-    '/ieee802-dot1q-bridge:bridges': 1523,
-    '/ietf-interfaces:interfaces': 1533,
-    '/ietf-interfaces:interfaces/interface': 1533,
+    '/ietf-system:system-state': 19020,
+    '/ietf-system:system-state/platform': 19024,
+    '/ietf-system:system': 19017,
+    '/ieee802-dot1q-bridge:bridges': 7025,
+    '/ietf-interfaces:interfaces': 2005,
+    '/ietf-interfaces:interfaces/interface': 2033,
     '/ietf-yang-library:yang-library': 29304,
     '/ietf-yang-library:modules-state': 29269,
-    'system-state': 1716,
-    'system': 1705,
-    'bridges': 1523,
-    'interfaces': 1533,
+    '/ieee1588-ptp:ptp': 15076,
+    'system-state': 19020,
+    'system': 19017,
+    'platform': 19024,
+    'bridges': 7025,
+    'interfaces': 2005,
+    'ptp': 15076,
     'yang-library': 29304
 };
 
@@ -687,8 +711,8 @@ function pathToSidQuery(path) {
         return [parseInt(path)];
     }
 
-    // Default to system-state
-    return [1716];
+    // Default to system-state (official SID)
+    return [19020];
 }
 
 // Store current checksum for YANG download
