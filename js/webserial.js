@@ -539,6 +539,31 @@ export class WebSerialManager extends EventTarget {
     }
 
     /**
+     * Convert JavaScript Map to plain object recursively
+     * CBOR.encode() doesn't support Map objects
+     */
+    _mapToPlainObject(data) {
+        if (data instanceof Map) {
+            const obj = {};
+            for (const [key, value] of data.entries()) {
+                obj[key] = this._mapToPlainObject(value);
+            }
+            return obj;
+        }
+        if (Array.isArray(data)) {
+            return data.map(item => this._mapToPlainObject(item));
+        }
+        if (data !== null && typeof data === 'object' && !(data instanceof Uint8Array)) {
+            const obj = {};
+            for (const [key, value] of Object.entries(data)) {
+                obj[key] = this._mapToPlainObject(value);
+            }
+            return obj;
+        }
+        return data;
+    }
+
+    /**
      * Send iPATCH request with Block1 support
      */
     async sendiPatchRequest(patch, options = {}) {
@@ -553,7 +578,10 @@ export class WebSerialManager extends EventTarget {
         if (patch instanceof Uint8Array) {
             payload = patch;
         } else {
-            const encoded = CBOR.encode(patch);
+            // Convert Map to plain object for CBOR encoding
+            const plainObj = this._mapToPlainObject(patch);
+            console.log(`[iPatch] Plain object:`, plainObj);
+            const encoded = CBOR.encode(plainObj);
             payload = new Uint8Array(encoded);
         }
         const totalSize = payload.length;
