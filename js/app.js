@@ -1,84 +1,72 @@
 /**
- * KETI TSN WebSerial - Main Application
+ * VelocityDRIVE-SP WebSerial Application
  */
 
-import { serialManager } from './webserial.js';
+import { WebSerialManager } from './webserial.js';
 
-// DOM Elements
-const elements = {
-    connectBtn: document.getElementById('connectBtn'),
-    connectionStatus: document.getElementById('connectionStatus'),
-    deviceInfo: document.getElementById('deviceInfo'),
-    cardStatusIcon: document.getElementById('cardStatusIcon'),
-    connStatusText: document.getElementById('connStatusText'),
-    platformInfo: document.getElementById('platformInfo'),
-    versionInfo: document.getElementById('versionInfo'),
-    yangCacheStatus: document.getElementById('yangCacheStatus'),
-    downloadYangBtn: document.getElementById('downloadYangBtn'),
+const serialManager = new WebSerialManager();
 
-    // Quick actions
-    getChecksumBtn: document.getElementById('getChecksumBtn'),
-    getConfigBtn: document.getElementById('getConfigBtn'),
-    fetchSystemBtn: document.getElementById('fetchSystemBtn'),
-    fetchBridgeBtn: document.getElementById('fetchBridgeBtn'),
-
-    // Config panel
-    yangPathInput: document.getElementById('yangPathInput'),
-    fetchBtn: document.getElementById('fetchBtn'),
-    fetchResult: document.getElementById('fetchResult'),
-    copyResultBtn: document.getElementById('copyResultBtn'),
-
-    // TSN panel
-    applyCbsBtn: document.getElementById('applyCbsBtn'),
-    applyTasBtn: document.getElementById('applyTasBtn'),
-    addGateEntry: document.getElementById('addGateEntry'),
-    gateEntries: document.getElementById('gateEntries'),
-
-    // Terminal
-    terminalOutput: document.getElementById('terminalOutput'),
-    clearTerminalBtn: document.getElementById('clearTerminalBtn'),
-    autoScrollCheck: document.getElementById('autoScrollCheck'),
-    showHexCheck: document.getElementById('showHexCheck'),
-
-    // Loading
-    loadingOverlay: document.getElementById('loadingOverlay'),
-    loadingText: document.getElementById('loadingText'),
-
-    // Toast
-    toastContainer: document.getElementById('toastContainer')
+// YANG SID Catalog
+const yangCatalog = {
+    sidMap: new Map(),
+    sidToPath: new Map(),
+    checksum: null
 };
 
-// Navigation
-document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+// DOM Elements
+const $ = id => document.getElementById(id);
 
-        item.classList.add('active');
-        const panelId = item.dataset.panel + 'Panel';
-        document.getElementById(panelId).classList.add('active');
-    });
-});
+const elements = {
+    connectBtn: $('connectBtn'),
+    connectionBadge: $('connectionBadge'),
+    statusValue: $('statusValue'),
+    platformValue: $('platformValue'),
+    versionValue: $('versionValue'),
+    yangValue: $('yangValue'),
+    portGrid: $('portGrid'),
 
-// TSN Tabs
-document.querySelectorAll('.tsn-tab').forEach(tab => {
+    getChecksumBtn: $('getChecksumBtn'),
+    fetchSystemBtn: $('fetchSystemBtn'),
+    fetchBridgeBtn: $('fetchBridgeBtn'),
+    fetchInterfacesBtn: $('fetchInterfacesBtn'),
+
+    yangPathInput: $('yangPathInput'),
+    fetchBtn: $('fetchBtn'),
+    fetchResult: $('fetchResult'),
+    copyResultBtn: $('copyResultBtn'),
+
+    applyCbsBtn: $('applyCbsBtn'),
+    applyTasBtn: $('applyTasBtn'),
+    applyPtpBtn: $('applyPtpBtn'),
+
+    terminalOutput: $('terminalOutput'),
+    clearTerminalBtn: $('clearTerminalBtn'),
+    autoScrollCheck: $('autoScrollCheck'),
+    showHexCheck: $('showHexCheck'),
+
+    loadingOverlay: $('loadingOverlay'),
+    loadingText: $('loadingText'),
+    toastContainer: $('toastContainer')
+};
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {
-        document.querySelectorAll('.tsn-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tsn-tab-panel').forEach(p => p.classList.remove('active'));
-
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         tab.classList.add('active');
-        document.getElementById(tab.dataset.tab + 'Tab').classList.add('active');
+        $(tab.dataset.tab + 'Tab').classList.add('active');
     });
 });
 
-// Example path buttons
-document.querySelectorAll('.example-btn').forEach(btn => {
+// Path buttons
+document.querySelectorAll('.path-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         elements.yangPathInput.value = btn.dataset.path;
     });
 });
 
-// Utility functions
+// Utilities
 function showLoading(text = '처리 중...') {
     elements.loadingText.textContent = text;
     elements.loadingOverlay.classList.add('active');
@@ -91,940 +79,307 @@ function hideLoading() {
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-
-    const icons = {
-        success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
-        error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
-    };
-
-    toast.innerHTML = `
-        <div class="toast-icon">${icons[type]}</div>
-        <div class="toast-message">${message}</div>
-    `;
-
+    toast.innerHTML = `<span class="toast-message">${message}</span>`;
     elements.toastContainer.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.animation = 'slideIn 0.3s ease reverse';
-        setTimeout(() => toast.remove(), 300);
-    }, 4000);
+    setTimeout(() => toast.remove(), 3000);
 }
 
-function addTerminalLine(message, type = 'system') {
+function formatTimestamp() {
+    return new Date().toLocaleTimeString('ko-KR', { hour12: false });
+}
+
+function addTerminalLine(text, type = 'system') {
     const line = document.createElement('div');
     line.className = `terminal-line ${type}`;
-    line.textContent = message;
+    line.textContent = text;
     elements.terminalOutput.appendChild(line);
-
-    if (elements.autoScrollCheck.checked) {
+    if (elements.autoScrollCheck?.checked) {
         elements.terminalOutput.scrollTop = elements.terminalOutput.scrollHeight;
     }
 }
 
-function formatTimestamp() {
-    return new Date().toLocaleTimeString();
-}
-
-// Convert CBOR result to displayable format
-function formatCborResult(data, indent = 2) {
-    // Handle Map objects (CBOR uses Maps for objects with integer keys)
-    if (data instanceof Map) {
-        const obj = {};
-        for (const [key, value] of data) {
-            obj[key] = formatCborResult(value, indent);
-        }
-        return obj;
-    }
-
-    // Handle Uint8Array - convert to hex string
-    if (data instanceof Uint8Array || (data && data.constructor && data.constructor.name === 'Uint8Array')) {
-        return '0x' + Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    // Handle ArrayBuffer
-    if (data instanceof ArrayBuffer) {
-        return '0x' + Array.from(new Uint8Array(data)).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    // Handle arrays
-    if (Array.isArray(data)) {
-        return data.map(item => formatCborResult(item, indent));
-    }
-
-    // Handle plain objects
-    if (data && typeof data === 'object' && !(data instanceof Date)) {
-        const obj = {};
-        for (const [key, value] of Object.entries(data)) {
-            obj[key] = formatCborResult(value, indent);
-        }
-        return obj;
-    }
-
-    // Handle BigInt
-    if (typeof data === 'bigint') {
-        return data.toString();
-    }
-
-    return data;
-}
-
-function stringifyCbor(data) {
-    const formatted = formatCborResult(data);
-    return JSON.stringify(formatted, null, 2);
-}
-
-// Delta-SID to human-readable path decoder
-// Compatible with LAN9662 and LAN9692 boards (VelocityDRIVE-SP)
-const sidToName = {
-    // ietf-system (ietf-system@2014-08-06.sid)
-    19017: 'system',
-    19018: 'contact',
-    19019: 'hostname',
-    19020: 'system-state',
-    19021: 'location',
-    19022: 'clock',
-    19023: 'boot-datetime',
-    19024: 'platform',
-    19025: 'machine',
-    19026: 'os-name',
-    19027: 'os-release',
-    19028: 'os-version',
-    19029: 'current-datetime',
-
-    // ietf-interfaces (ietf-interfaces@2018-02-20.sid)
-    2005: 'interfaces',
-    2006: 'admin-status',
-    2007: 'description',
-    2010: 'enabled',
-    2011: 'if-index',
-    2015: 'last-change',
-    2016: 'link-up-down-trap-enable',
-    2019: 'name',
-    2020: 'oper-status',
-    2021: 'phys-address',
-    2022: 'statistics',
-    2023: 'discontinuity-time',
-    2024: 'in-broadcast-pkts',
-    2025: 'in-discards',
-    2026: 'in-errors',
-    2027: 'in-multicast-pkts',
-    2028: 'in-octets',
-    2029: 'type',
-    2030: 'in-unicast-pkts',
-    2031: 'in-unknown-protos',
-    2032: 'out-broadcast-pkts',
-    2033: 'interface',
-    2034: 'out-discards',
-    2035: 'out-errors',
-    2036: 'out-multicast-pkts',
-    2037: 'out-octets',
-    2038: 'out-unicast-pkts',
-    2039: 'speed',
-
-    // ieee802-dot1q-bridge (ieee802-dot1q-bridge@2023-04-17.sid)
-    7025: 'bridges',
-    7026: 'bridge',
-    7027: 'address',
-    7028: 'bridge-port',
-    7029: 'bridge-pvid',
-    7030: 'bridge-type',
-    7031: 'component',
-    7032: 'filtering-database',
-    7033: 'permanent-database',
-    7034: 'vlan-registration-entry',
-    7042: 'name',
-    7043: 'num-ports',
-    7044: 'ports',
-    7045: 'port-num',
-    7046: 'port-type',
-
-    // ieee802-dot1q-sched (TAS - ieee802-dot1q-sched@2023-03-16.sid)
-    6003: 'gate-parameters',
-    6004: 'gate-enabled',
-    6005: 'admin-gate-states',
-    6006: 'oper-gate-states',
-    6007: 'admin-control-list',
-    6008: 'oper-control-list',
-    6009: 'admin-cycle-time',
-    6010: 'max-sdu-table',
-    6011: 'max-sdu',
-    6012: 'transmission-overrun',
-
-    // ieee1588-ptp (ieee1588-ptp@2022-08-30.sid)
-    15076: 'ptp',
-    15077: 'common-services',
-    15133: 'instances',
-    15134: 'instance',
-    15152: 'current-ds',
-    15153: 'mean-delay',
-    15154: 'mean-path-delay',
-    15155: 'offset-from-master',
-    15156: 'steps-removed',
-    15158: 'default-ds',
-    15159: 'clock-identity',
-    15167: 'domain-number',
-    15169: 'instance-enable',
-    15173: 'priority1',
-    15174: 'priority2',
-    15206: 'instance-index',
-    15207: 'parent-ds',
-    15212: 'grandmaster-identity',
-    15252: 'ports',
-    15253: 'port',
-
-    // yang-library (ietf-constrained-yang-library)
-    29304: 'yang-library',
-    29305: 'checksum',
-    29269: 'modules-state',
-    29270: 'module',
-    29271: 'conformance-type',
-    29272: 'deviation',
-    29273: 'feature',
-    29274: 'module-set-id',
-    29275: 'namespace',
-    29276: 'revision',
-    29277: 'schema',
-    29278: 'submodule'
-};
-
-// Get human-readable name for SID
-function getSidName(sid) {
-    // Try official catalog first
-    if (yangCatalog.sidToPath && yangCatalog.sidToPath.has(sid)) {
-        const path = yangCatalog.sidToPath.get(sid);
-        // Extract last segment: /ietf-system:system-state/platform -> platform
-        const parts = path.split('/');
-        const last = parts[parts.length - 1];
-        // Remove module prefix: ieee802-dot1q-bridge:bridges -> bridges
-        return last.includes(':') ? last.split(':')[1] : last;
-    }
-    // Fallback to hardcoded mappings
-    return sidToName[sid] || null;
-}
-
-// Decode delta-SID CBOR to human-readable format
-function decodeDeltaSid(data, parentSid = null) {
-    if (data instanceof Map) {
-        const obj = {};
-        for (const [key, value] of data) {
-            const absoluteSid = parentSid !== null ? parentSid + key : key;
-            const name = getSidName(absoluteSid) || `sid:${absoluteSid}`;
-            obj[name] = decodeDeltaSid(value, absoluteSid);
-        }
-        return obj;
-    }
-
-    if (Array.isArray(data)) {
-        return data.map(item => decodeDeltaSid(item, parentSid));
-    }
-
-    if (data instanceof Uint8Array) {
-        return '0x' + Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    if (typeof data === 'object' && data !== null) {
-        const obj = {};
-        for (const [key, value] of Object.entries(data)) {
-            const numKey = parseInt(key);
-            if (!isNaN(numKey)) {
-                const absoluteSid = parentSid !== null ? parentSid + numKey : numKey;
-                const name = getSidName(absoluteSid) || `sid:${absoluteSid}`;
-                obj[name] = decodeDeltaSid(value, absoluteSid);
-            } else {
-                obj[key] = decodeDeltaSid(value, parentSid);
-            }
-        }
-        return obj;
-    }
-
-    return data;
-}
-
-// Format CBOR with optional delta-SID decoding
-function formatCborWithNames(data) {
-    const decoded = decodeDeltaSid(formatCborResult(data));
-    return JSON.stringify(decoded, null, 2);
-}
-
 function updateConnectionUI(connected, ready = false) {
-    if (connected) {
-        elements.connectionStatus.classList.add('connected');
-        elements.connectionStatus.classList.remove('connecting');
-        elements.connectionStatus.querySelector('.status-text').textContent = ready ? '연결됨' : '대기 중...';
-        elements.connectBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-            연결 해제
-        `;
-        elements.cardStatusIcon.classList.toggle('connected', ready);
-        elements.connStatusText.textContent = ready ? '보드 연결됨' : 'ANNOUNCE 대기 중';
+    if (connected && ready) {
+        elements.connectionBadge.className = 'connection-badge connected';
+        elements.connectionBadge.querySelector('.badge-text').textContent = '연결됨';
+        elements.connectBtn.querySelector('span').textContent = '연결 해제';
+        elements.statusValue.textContent = '연결됨';
+        elements.statusValue.className = 'status-value status-connected';
+    } else if (connected) {
+        elements.connectionBadge.className = 'connection-badge connecting';
+        elements.connectionBadge.querySelector('.badge-text').textContent = '연결 중...';
+        elements.statusValue.textContent = '연결 중...';
     } else {
-        elements.connectionStatus.classList.remove('connected', 'connecting');
-        elements.connectionStatus.querySelector('.status-text').textContent = '연결 안됨';
-        elements.connectBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            </svg>
-            연결
-        `;
-        elements.cardStatusIcon.classList.remove('connected');
-        elements.connStatusText.textContent = '연결 대기';
-        elements.deviceInfo.querySelector('.device-value').textContent = '-';
-        elements.platformInfo.textContent = '-';
-        elements.versionInfo.textContent = '-';
+        elements.connectionBadge.className = 'connection-badge';
+        elements.connectionBadge.querySelector('.badge-text').textContent = '연결 안됨';
+        elements.connectBtn.querySelector('span').textContent = '연결';
+        elements.statusValue.textContent = '대기 중';
+        elements.statusValue.className = 'status-value status-disconnected';
+        elements.platformValue.textContent = '-';
+        elements.versionValue.textContent = '-';
+        elements.yangValue.textContent = '-';
     }
 
     // Enable/disable buttons
-    const buttonsToToggle = [
-        elements.downloadYangBtn,
-        elements.getChecksumBtn,
-        elements.getConfigBtn,
-        elements.fetchSystemBtn,
-        elements.fetchBridgeBtn,
-        elements.fetchBtn,
-        elements.applyCbsBtn,
-        elements.applyTasBtn
+    const btns = [
+        elements.getChecksumBtn, elements.fetchSystemBtn,
+        elements.fetchBridgeBtn, elements.fetchInterfacesBtn,
+        elements.fetchBtn, elements.applyCbsBtn,
+        elements.applyTasBtn, elements.applyPtpBtn
     ];
-
-    buttonsToToggle.forEach(btn => {
-        if (btn) btn.disabled = !ready;
+    btns.forEach(btn => {
+        if (btn) btn.disabled = !(connected && ready);
     });
 }
 
-// Serial Manager Event Handlers
-serialManager.addEventListener('connected', (e) => {
-    console.log('Connected:', e.detail);
+// YANG Catalog
+async function loadYangCatalog(checksumHex) {
+    console.log(`Loading YANG SID catalog for checksum: ${checksumHex}`);
+    try {
+        const response = await fetch(`./js/catalogs/${checksumHex}.json`);
+        if (!response.ok) throw new Error('Catalog not found');
+
+        const data = await response.json();
+        for (const [path, sid] of Object.entries(data.pathToSid)) {
+            yangCatalog.sidMap.set(path, sid);
+        }
+        yangCatalog.sidToPath = new Map(
+            Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v])
+        );
+        yangCatalog.checksum = checksumHex;
+        console.log(`Loaded ${yangCatalog.sidToPath.size} SID mappings`);
+        elements.yangValue.textContent = checksumHex.substring(0, 8) + '...';
+        return true;
+    } catch (error) {
+        console.error('Failed to load catalog:', error);
+        return false;
+    }
+}
+
+function pathToSidQuery(path) {
+    // Try direct SID lookup
+    if (yangCatalog.sidMap.has(path)) {
+        return yangCatalog.sidMap.get(path);
+    }
+    // Common SID mappings
+    const commonSids = {
+        '/ietf-system:system-state': 19020,
+        '/ietf-system:system-state/platform': 19024,
+        '/ietf-interfaces:interfaces': 2005,
+        '/ieee802-dot1q-bridge:bridges': 7025,
+        '/ieee1588-ptp:ptp': 8000
+    };
+    return commonSids[path] || null;
+}
+
+function getSidName(sid) {
+    if (yangCatalog.sidToPath.has(sid)) {
+        const path = yangCatalog.sidToPath.get(sid);
+        const parts = path.split('/');
+        const last = parts[parts.length - 1];
+        return last.includes(':') ? last.split(':')[1] : last;
+    }
+    return null;
+}
+
+function decodeDeltaSids(data, parentSid) {
+    if (data === null || typeof data !== 'object') return data;
+
+    if (data instanceof Map) {
+        const result = {};
+        for (const [key, value] of data.entries()) {
+            const absoluteSid = typeof key === 'number' ? parentSid + key : key;
+            const name = getSidName(absoluteSid) || String(absoluteSid);
+            result[name] = decodeDeltaSids(value, absoluteSid);
+        }
+        return result;
+    }
+
+    if (Array.isArray(data)) {
+        return data.map(item => decodeDeltaSids(item, parentSid));
+    }
+
+    if (typeof data === 'object') {
+        const result = {};
+        for (const [key, value] of Object.entries(data)) {
+            const numKey = parseInt(key);
+            if (!isNaN(numKey)) {
+                const absoluteSid = parentSid + numKey;
+                const name = getSidName(absoluteSid) || String(absoluteSid);
+                result[name] = decodeDeltaSids(value, absoluteSid);
+            } else {
+                result[key] = decodeDeltaSids(value, parentSid);
+            }
+        }
+        return result;
+    }
+
+    return data;
+}
+
+// API Functions
+async function fetchChecksum() {
+    showLoading('체크섬 조회 중...');
+    try {
+        const query = [29304];
+        const response = await serialManager.sendiFetchRequest(query);
+
+        if (response.isSuccess() && response.payload) {
+            const data = response.getPayloadAsCBOR();
+            let checksumHex = null;
+
+            if (data instanceof Map) {
+                for (const value of data.values()) {
+                    if (typeof value === 'string') checksumHex = value;
+                }
+            }
+
+            if (checksumHex) {
+                await loadYangCatalog(checksumHex);
+                showToast('YANG 카탈로그 로드 완료', 'success');
+            }
+        }
+    } catch (error) {
+        console.error('Checksum fetch error:', error);
+        addTerminalLine(`체크섬 조회 실패: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function fetchSystemInfo() {
+    try {
+        const response = await serialManager.sendiFetchRequest(19024);
+        if (response.isSuccess() && response.payload) {
+            const data = response.getPayloadAsCBOR();
+            const decoded = decodeDeltaSids(data, 19024);
+
+            if (decoded['os-name']) {
+                elements.platformValue.textContent = decoded['os-name'];
+            }
+            if (decoded['os-version']) {
+                elements.versionValue.textContent = decoded['os-version'];
+            }
+        }
+    } catch (error) {
+        console.error('System info error:', error);
+    }
+}
+
+async function fetchPath(path) {
+    showLoading('조회 중...');
+    try {
+        const query = pathToSidQuery(path);
+        if (!query) {
+            elements.fetchResult.textContent = `// SID를 찾을 수 없습니다: ${path}`;
+            return;
+        }
+
+        addTerminalLine(`Fetching: ${path} (SID: ${query})`, 'info');
+        const response = await serialManager.sendiFetchRequest(query);
+
+        if (response.isSuccess() && response.payload) {
+            const data = response.getPayloadAsCBOR();
+            const decoded = decodeDeltaSids(data, query);
+            elements.fetchResult.textContent = JSON.stringify(decoded, null, 2);
+        } else {
+            elements.fetchResult.textContent = `// Error: ${response.code}`;
+        }
+    } catch (error) {
+        elements.fetchResult.textContent = `// Error: ${error.message}`;
+        addTerminalLine(`조회 실패: ${error.message}`, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Event Handlers
+serialManager.addEventListener('connected', () => {
+    console.log('Connected');
     updateConnectionUI(true, false);
     addTerminalLine(`[${formatTimestamp()}] 시리얼 포트 연결됨`, 'info');
-
-    if (e.detail.port) {
-        const info = e.detail.port;
-        elements.deviceInfo.querySelector('.device-value').textContent =
-            info.usbVendorId ? `VID:${info.usbVendorId.toString(16)} PID:${info.usbProductId.toString(16)}` : 'USB Serial';
-    }
 });
 
 serialManager.addEventListener('disconnected', () => {
     console.log('Disconnected');
     updateConnectionUI(false);
-    addTerminalLine(`[${formatTimestamp()}] 시리얼 포트 연결 해제됨`, 'system');
+    addTerminalLine(`[${formatTimestamp()}] 연결 해제됨`, 'system');
 });
 
-serialManager.addEventListener('announce', async (e) => {
+serialManager.addEventListener('announce', async () => {
     console.log('Board ready');
     updateConnectionUI(true, true);
-    addTerminalLine(`[${formatTimestamp()}] ANNOUNCE 수신 - 보드 준비 완료`, 'info');
+    addTerminalLine(`[${formatTimestamp()}] ANNOUNCE - 보드 준비 완료`, 'info');
 
-    // Auto-initialize: checksum → catalog → system info
+    // Auto-init
     try {
-        addTerminalLine(`[${formatTimestamp()}] 자동 초기화 시작...`, 'system');
-
-        // 1. Fetch checksum and download catalog
         await fetchChecksum();
-
-        // 2. Fetch system info
         await fetchSystemInfo();
-
         showToast('보드 초기화 완료!', 'success');
     } catch (error) {
         console.error('Auto-init error:', error);
-        addTerminalLine(`[${formatTimestamp()}] 초기화 실패: ${error.message}`, 'error');
-        showToast('초기화 실패 - 수동으로 시도해 주세요', 'warning');
     }
 });
 
+serialManager.addEventListener('trace', (e) => {
+    addTerminalLine(`TRACE: ${e.detail.error}`, 'error');
+});
+
 serialManager.addEventListener('tx', (e) => {
-    const hex = elements.showHexCheck.checked ? ` [${e.detail.hex}]` : '';
-    addTerminalLine(`[${formatTimestamp()}] TX: ${e.detail.data.length} bytes${hex}`, 'tx');
+    if (elements.showHexCheck?.checked) {
+        addTerminalLine(`TX: ${e.detail.hex}`, 'tx');
+    }
 });
 
 serialManager.addEventListener('rx', (e) => {
-    const hex = elements.showHexCheck.checked ? ` [${e.detail.hex}]` : '';
-    addTerminalLine(`[${formatTimestamp()}] RX: ${e.detail.data.length} bytes${hex}`, 'rx');
+    if (elements.showHexCheck?.checked) {
+        addTerminalLine(`RX: ${e.detail.hex}`, 'rx');
+    }
 });
 
-serialManager.addEventListener('error', (e) => {
-    console.error('Serial error:', e.detail);
-    addTerminalLine(`[${formatTimestamp()}] 에러: ${e.detail.message || e.detail}`, 'error');
-    showToast(e.detail.message || '오류가 발생했습니다', 'error');
-});
-
-serialManager.addEventListener('trace', (e) => {
-    addTerminalLine(`[${formatTimestamp()}] TRACE: ${e.detail.error}`, 'error');
-});
-
-// Connect/Disconnect button
+// Button handlers
 elements.connectBtn.addEventListener('click', async () => {
     try {
         if (serialManager.isConnected) {
             await serialManager.disconnect();
         } else {
-            elements.connectionStatus.classList.add('connecting');
-            elements.connectionStatus.querySelector('.status-text').textContent = '연결 중...';
+            elements.connectionBadge.className = 'connection-badge connecting';
+            elements.connectionBadge.querySelector('.badge-text').textContent = '연결 중...';
             await serialManager.connect();
         }
     } catch (error) {
         console.error('Connection error:', error);
-        updateConnectionUI(false);
         showToast(error.message, 'error');
+        updateConnectionUI(false);
     }
 });
 
-// Fetch system info
-async function fetchSystemInfo() {
-    // Official SIDs from Microchip YANG catalog:
-    // /ietf-system:system-state/platform = 19024
-    // /ietf-system:system-state = 19020
-    // Note: iFETCH query is just the SID number, NOT an array
-    const sidQueries = [
-        { sid: 19024, name: 'platform' },
-        { sid: 19020, name: 'system-state' }
-    ];
+elements.getChecksumBtn?.addEventListener('click', fetchChecksum);
+elements.fetchSystemBtn?.addEventListener('click', () => fetchPath('/ietf-system:system-state/platform'));
+elements.fetchBridgeBtn?.addEventListener('click', () => fetchPath('/ieee802-dot1q-bridge:bridges'));
+elements.fetchInterfacesBtn?.addEventListener('click', () => fetchPath('/ietf-interfaces:interfaces'));
 
-    for (const { sid, name } of sidQueries) {
-        try {
-            console.log(`Trying to fetch ${name} (SID ${sid})...`);
-            const response = await serialManager.sendiFetchRequest(sid);
-
-            if (response.isSuccess() && response.payload) {
-                const data = response.getPayloadAsCBOR();
-                console.log(`${name} response:`, data);
-
-                const formatted = formatCborResult(data);
-                console.log(`Formatted ${name}:`, formatted);
-
-                // Check if we got actual data (not null)
-                const hasData = formatted && Object.values(formatted).some(v => v !== null);
-                if (!hasData) {
-                    console.log(`${name} returned null, trying next...`);
-                    continue;
-                }
-
-                // Extract platform info from the response
-                // Response may be {19024: {...}} or {delta-sid: "value", ...}
-                let platformData = formatted;
-                if (formatted['19024']) platformData = formatted['19024'];
-                else if (formatted['19020']) platformData = formatted['19020'];
-
-                if (typeof platformData === 'object' && platformData !== null) {
-                    // Delta-SID encoding: values are relative to parent SID
-                    // platform (19024): os-name=+2(19026), os-release=+3(19027), os-version=+4(19028), machine=+1(19025)
-                    const osName = platformData['2'] || platformData['19026'] || platformData['os-name'];
-                    const osVersion = platformData['4'] || platformData['19028'] || platformData['os-version'];
-                    const machine = platformData['1'] || platformData['19025'] || platformData['machine'];
-
-                    if (osName) elements.platformInfo.textContent = osName;
-                    if (osVersion) elements.versionInfo.textContent = osVersion;
-                    if (machine && !osName) elements.platformInfo.textContent = machine;
-
-                    // If still nothing, show first string values found
-                    if (elements.platformInfo.textContent === '-') {
-                        for (const [key, value] of Object.entries(platformData)) {
-                            if (typeof value === 'string' && value.length > 0) {
-                                elements.platformInfo.textContent = value;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (elements.platformInfo.textContent !== '-') {
-                        return; // Success, stop trying
-                    }
-                }
-            }
-        } catch (error) {
-            console.log(`Failed to fetch ${name}:`, error.message);
-        }
-    }
-
-    console.log('Could not fetch system info from any SID');
-}
-
-// Quick actions
-elements.getChecksumBtn?.addEventListener('click', async () => {
-    try {
-        showLoading('체크섬 조회 중...');
-        // RFC 9254: iFETCH for yang-library/checksum uses array format
-        const query = [29304]; // yang-library checksum SID (array format per CLI)
-        const response = await serialManager.sendiFetchRequest(query);
-
-        if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            const formatted = formatCborResult(data);
-
-            // Extract checksum hex string
-            let checksumHex = null;
-            if (formatted && formatted['29304']) {
-                checksumHex = formatted['29304'];
-            } else if (typeof formatted === 'string' && formatted.startsWith('0x')) {
-                checksumHex = formatted;
-            }
-
-            if (checksumHex) {
-                // Remove '0x' prefix if present
-                currentChecksum = checksumHex.replace('0x', '');
-                elements.yangCacheStatus.textContent = checksumHex;
-                elements.downloadYangBtn.disabled = false;
-            } else {
-                elements.yangCacheStatus.textContent = stringifyCbor(data);
-            }
-            showToast('체크섬 조회 완료', 'success');
-        }
-    } catch (error) {
-        showToast('체크섬 조회 실패: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-});
-
-// YANG Catalog Download
-elements.downloadYangBtn?.addEventListener('click', async () => {
-    if (!currentChecksum) {
-        showToast('먼저 체크섬을 조회하세요', 'warning');
-        return;
-    }
-
-    try {
-        showLoading('YANG 카탈로그 다운로드 중...');
-        addTerminalLine(`[${formatTimestamp()}] YANG 카탈로그 다운로드 시작: ${currentChecksum}`, 'info');
-
-        const success = await yangCatalog.download(currentChecksum);
-
-        if (success && yangCatalog.sidMap.size > 0) {
-            showToast(`YANG 카탈로그 로드 완료 (${yangCatalog.sidMap.size} 매핑)`, 'success');
-            addTerminalLine(`[${formatTimestamp()}] YANG 카탈로그 로드 완료: ${yangCatalog.sidMap.size} SID 매핑`, 'info');
-            elements.yangCacheStatus.textContent = `${currentChecksum.slice(0, 8)}... (${yangCatalog.sidMap.size} SIDs)`;
-        } else {
-            showToast('YANG 카탈로그 다운로드 실패 (기본 매핑 사용)', 'warning');
-            addTerminalLine(`[${formatTimestamp()}] YANG 카탈로그 다운로드 실패, 기본 매핑 사용`, 'error');
-        }
-    } catch (error) {
-        showToast('YANG 다운로드 실패: ' + error.message, 'error');
-        addTerminalLine(`[${formatTimestamp()}] YANG 다운로드 에러: ${error.message}`, 'error');
-    } finally {
-        hideLoading();
-    }
-});
-
-elements.getConfigBtn?.addEventListener('click', async () => {
-    try {
-        showLoading('설정 백업 중...');
-        const response = await serialManager.sendGetRequest();
-
-        if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            const jsonStr = stringifyCbor(data);
-
-            // Download as file
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `config-backup-${new Date().toISOString().slice(0,10)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-
-            showToast('설정 백업 완료', 'success');
-        }
-    } catch (error) {
-        showToast('설정 백업 실패: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-});
-
-elements.fetchSystemBtn?.addEventListener('click', async () => {
-    try {
-        showLoading('시스템 정보 조회 중...');
-        const query = 19020; // /ietf-system:system-state (not array)
-        const response = await serialManager.sendiFetchRequest(query);
-
-        if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = formatCborWithNames(data);
-            document.querySelector('[data-panel="config"]').click();
-            showToast('시스템 정보 조회 완료', 'success');
-        }
-    } catch (error) {
-        showToast('시스템 정보 조회 실패: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-});
-
-elements.fetchBridgeBtn?.addEventListener('click', async () => {
-    try {
-        showLoading('브릿지 정보 조회 중...');
-        const query = 7025; // /ieee802-dot1q-bridge:bridges (not array)
-        const response = await serialManager.sendiFetchRequest(query);
-
-        if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = formatCborWithNames(data);
-            document.querySelector('[data-panel="config"]').click();
-            showToast('브릿지 정보 조회 완료', 'success');
-        }
-    } catch (error) {
-        showToast('브릿지 정보 조회 실패: ' + error.message, 'error');
-    } finally {
-        hideLoading();
-    }
-});
-
-// Config fetch
-elements.fetchBtn?.addEventListener('click', async () => {
+elements.fetchBtn?.addEventListener('click', () => {
     const path = elements.yangPathInput.value.trim();
-    if (!path) {
-        showToast('YANG 경로를 입력하세요', 'warning');
-        return;
-    }
+    if (path) fetchPath(path);
+});
 
-    try {
-        showLoading('설정 조회 중...');
-
-        // Convert path to SID query using YANG catalog
-        const query = pathToSidQuery(path);
-        console.log(`Fetching path: ${path} -> query:`, query);
-        const response = await serialManager.sendiFetchRequest(query);
-
-        if (response.isSuccess() && response.payload) {
-            const data = response.getPayloadAsCBOR();
-            elements.fetchResult.textContent = formatCborWithNames(data);
-            showToast('조회 완료', 'success');
-        } else {
-            elements.fetchResult.textContent = `// 응답 코드: ${response.getCodeClass()}.${response.getCodeDetail()}`;
-            showToast('조회 실패: 응답 코드 ' + response.code, 'error');
-        }
-    } catch (error) {
-        elements.fetchResult.textContent = `// 에러: ${error.message}`;
-        showToast('조회 실패: ' + error.message, 'error');
-    } finally {
-        hideLoading();
+elements.yangPathInput?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const path = elements.yangPathInput.value.trim();
+        if (path) fetchPath(path);
     }
 });
 
-// YANG Catalog Manager
-const yangCatalog = {
-    checksum: null,
-    sidMap: new Map(),      // path -> SID
-    sidToPath: new Map(),   // SID -> path (for decoding)
-    loaded: false,
-
-    // Download YANG catalog from Microchip servers
-    async download(checksumHex) {
-        try {
-            // Try to load from pre-extracted catalog file (per-checksum)
-            console.log(`Loading YANG SID catalog for checksum: ${checksumHex}`);
-
-            // Try checksum-specific catalog first
-            let response = await fetch(`./js/catalogs/${checksumHex}.json`);
-
-            // Fallback to legacy single file
-            if (!response.ok) {
-                response = await fetch('./js/yang-sids.json');
-            }
-
-            if (response.ok) {
-                const data = await response.json();
-
-                // Verify checksum matches (for legacy file)
-                if (data.checksum && data.checksum !== checksumHex) {
-                    console.warn(`Checksum mismatch: expected ${checksumHex}, got ${data.checksum}`);
-                    throw new Error('Checksum mismatch');
-                }
-
-                console.log(`Loaded official Microchip YANG catalog (${checksumHex})`);
-
-                // Load pathToSid mappings
-                for (const [path, sid] of Object.entries(data.pathToSid)) {
-                    this.sidMap.set(path, sid);
-
-                    // Also add short name alias
-                    const parts = path.split('/');
-                    const shortName = parts[parts.length - 1];
-                    if (shortName && !shortName.includes(':')) {
-                        this.sidMap.set(shortName, sid);
-                    }
-                }
-
-                // Load sidToPath for reverse lookup
-                if (data.sidToPath) {
-                    this.sidToPath = new Map(Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v]));
-                }
-
-                this.checksum = checksumHex;
-                this.loaded = true;
-                console.log(`YANG catalog loaded: ${this.sidMap.size} SID mappings`);
-                return true;
-            }
-
-            throw new Error('Catalog not found');
-        } catch (error) {
-            console.warn('Catalog load failed, using built-in mappings:', error.message);
-            // Fallback to built-in mappings
-            await this.loadBuiltInMappings(checksumHex);
-            this.checksum = checksumHex;
-            this.loaded = true;
-            return true;
-        }
-    },
-
-    // Load pre-built SID mappings for known checksums
-    async loadBuiltInMappings(checksumHex) {
-        // Official VelocityDRIVE-SP SID mappings from Microchip YANG catalog
-        const knownMappings = {
-            '5151bae07677b1501f9cf52637f2a38f': {
-                // ietf-system (official SIDs from ietf-system@2014-08-06.sid)
-                '/ietf-system:system': 19017,
-                '/ietf-system:system/contact': 19018,
-                '/ietf-system:system/hostname': 19019,
-                '/ietf-system:system/location': 19021,
-                '/ietf-system:system-state': 19020,
-                '/ietf-system:system-state/platform': 19024,
-                '/ietf-system:system-state/platform/machine': 19025,
-                '/ietf-system:system-state/platform/os-name': 19026,
-                '/ietf-system:system-state/platform/os-release': 19027,
-                '/ietf-system:system-state/platform/os-version': 19028,
-                '/ietf-system:system-state/clock': 19022,
-                '/ietf-system:system-state/clock/boot-datetime': 19023,
-                '/ietf-system:system-state/clock/current-datetime': 19029,
-                'system': 19017,
-                'system-state': 19020,
-                'platform': 19024,
-
-                // ietf-interfaces (official SIDs from ietf-interfaces@2018-02-20.sid)
-                '/ietf-interfaces:interfaces': 2005,
-                '/ietf-interfaces:interfaces/interface': 2033,
-                '/ietf-interfaces:interfaces/interface/name': 2019,
-                '/ietf-interfaces:interfaces/interface/enabled': 2010,
-                '/ietf-interfaces:interfaces/interface/type': 2029,
-                '/ietf-interfaces:interfaces/interface/oper-status': 2020,
-                '/ietf-interfaces:interfaces/interface/admin-status': 2006,
-                '/ietf-interfaces:interfaces/interface/statistics': 2022,
-                'interfaces': 2005,
-                'interface': 2033,
-
-                // ieee802-dot1q-bridge (official SIDs from ieee802-dot1q-bridge@2023-04-17.sid)
-                '/ieee802-dot1q-bridge:bridges': 7025,
-                '/ieee802-dot1q-bridge:bridges/bridge': 7026,
-                '/ieee802-dot1q-bridge:bridges/bridge/name': 7042,
-                '/ieee802-dot1q-bridge:bridges/bridge/address': 7027,
-                '/ieee802-dot1q-bridge:bridges/bridge/bridge-type': 7030,
-                '/ieee802-dot1q-bridge:bridges/bridge/component': 7031,
-                'bridges': 7025,
-                'bridge': 7026,
-
-                // ieee802-dot1q-sched (TAS) - from ieee802-dot1q-sched@2023-03-16.sid
-                '/ieee802-dot1q-sched:gate-parameters': 6003,
-                '/ieee802-dot1q-sched:max-sdu-table': 6010,
-                'gate-parameters': 6003,
-
-                // ieee1588-ptp (PTP)
-                '/ieee1588-ptp:ptp': 15076,
-                '/ieee1588-ptp:ptp/instances': 15133,
-                '/ieee1588-ptp:ptp/instances/instance': 15134,
-                'ptp': 15076,
-
-                // ietf-yang-library
-                '/ietf-yang-library:yang-library': 29304,
-                '/ietf-yang-library:yang-library/checksum': 29305,
-                '/ietf-yang-library:modules-state': 29269,
-                'yang-library': 29304,
-                'modules-state': 29269
-            }
-        };
-
-        const mappings = knownMappings[checksumHex] || knownMappings['5151bae07677b1501f9cf52637f2a38f'];
-
-        for (const [path, sid] of Object.entries(mappings)) {
-            this.sidMap.set(path, sid);
-        }
-
-        console.log(`Loaded ${this.sidMap.size} built-in SID mappings`);
-    },
-
-    // Parse SID file and build mapping
-    parseSidFile(sidData) {
-        if (!sidData || !sidData.items) return;
-
-        const moduleName = sidData['module-name'];
-        for (const item of sidData.items) {
-            if (item.sid && item.identifier) {
-                // Build full path
-                const path = item.namespace === 'module'
-                    ? `/${moduleName}:${item.identifier}`
-                    : `/${moduleName}:${item.identifier}`;
-                this.sidMap.set(path, item.sid);
-
-                // Also store shorter version
-                if (item.identifier) {
-                    this.sidMap.set(item.identifier, item.sid);
-                }
-            }
-        }
-    },
-
-    // Get SID for a path
-    getSid(path) {
-        // Direct lookup
-        if (this.sidMap.has(path)) {
-            return this.sidMap.get(path);
-        }
-
-        // Try without leading slash
-        const pathNoSlash = path.startsWith('/') ? path.slice(1) : path;
-        if (this.sidMap.has(pathNoSlash)) {
-            return this.sidMap.get(pathNoSlash);
-        }
-
-        // Try to find partial match
-        for (const [p, sid] of this.sidMap) {
-            if (p.includes(pathNoSlash) || pathNoSlash.includes(p)) {
-                return sid;
-            }
-        }
-
-        return null;
-    }
-};
-
-// Built-in SID mappings for common paths (fallback) - Official Microchip values
-// Compatible with LAN9662 and LAN9692 boards
-const defaultSidMap = {
-    // ietf-system
-    '/ietf-system:system-state': 19020,
-    '/ietf-system:system-state/platform': 19024,
-    '/ietf-system:system-state/clock': 19022,
-    '/ietf-system:system': 19017,
-    '/ietf-system:system/hostname': 19019,
-    '/ietf-system:system/contact': 19018,
-
-    // ietf-interfaces
-    '/ietf-interfaces:interfaces': 2005,
-    '/ietf-interfaces:interfaces/interface': 2033,
-
-    // ieee802-dot1q-bridge
-    '/ieee802-dot1q-bridge:bridges': 7025,
-    '/ieee802-dot1q-bridge:bridges/bridge': 7026,
-
-    // ieee802-dot1q-sched (TAS)
-    '/ieee802-dot1q-sched:gate-parameters': 6003,
-    '/ieee802-dot1q-sched:max-sdu-table': 6010,
-
-    // ieee1588-ptp (PTP)
-    '/ieee1588-ptp:ptp': 15076,
-    '/ieee1588-ptp:ptp/instances': 15133,
-    '/ieee1588-ptp:ptp/instances/instance': 15134,
-
-    // yang-library
-    '/ietf-yang-library:yang-library': 29304,
-    '/ietf-yang-library:modules-state': 29269,
-    '/ietf-constrained-yang-library:yang-library': 29304,
-
-    // Short aliases
-    'system-state': 19020,
-    'system': 19017,
-    'platform': 19024,
-    'clock': 19022,
-    'hostname': 19019,
-    'bridges': 7025,
-    'bridge': 7026,
-    'interfaces': 2005,
-    'interface': 2033,
-    'ptp': 15076,
-    'gate-parameters': 6003,
-    'yang-library': 29304,
-    'checksum': 29305
-};
-
-// Path to SID conversion
-// Returns: number (single SID) or array [SID, key1, key2, ...] for list entries
-function pathToSidQuery(path) {
-    // Check for list key notation: path[key='value']
-    const listMatch = path.match(/^(.+)\[([^=]+)='([^']+)'\]$/);
-    if (listMatch) {
-        const basePath = listMatch[1];
-        const keyValue = listMatch[3];
-        const sid = getSidForPath(basePath);
-        if (sid) {
-            return [sid, keyValue]; // Array for list entry
-        }
-    }
-
-    // Simple path - return just the SID number
-    const sid = getSidForPath(path);
-    return sid || 19020; // Default to system-state
-}
-
-// Helper to get SID for a path
-function getSidForPath(path) {
-    // Try YANG catalog first
-    if (yangCatalog.loaded) {
-        const sid = yangCatalog.getSid(path);
-        if (sid) return sid;
-    }
-
-    // Check default mappings
-    for (const [p, sid] of Object.entries(defaultSidMap)) {
-        if (path.startsWith(p) || path === p) {
-            return sid;
-        }
-    }
-
-    // Try to parse as numeric SID
-    if (/^\d+$/.test(path)) {
-        return parseInt(path);
-    }
-
-    return null;
-}
-
-// Store current checksum for YANG download
-let currentChecksum = null;
-
-// Copy result
 elements.copyResultBtn?.addEventListener('click', () => {
-    navigator.clipboard.writeText(elements.fetchResult.textContent)
-        .then(() => showToast('클립보드에 복사됨', 'success'))
-        .catch(() => showToast('복사 실패', 'error'));
+    navigator.clipboard.writeText(elements.fetchResult.textContent);
+    showToast('복사됨', 'success');
 });
 
-// Clear terminal
 elements.clearTerminalBtn?.addEventListener('click', () => {
-    elements.terminalOutput.innerHTML = '<div class="terminal-line system">터미널 클리어됨</div>';
+    elements.terminalOutput.innerHTML = '<div class="terminal-line system">터미널 클리어</div>';
 });
 
-// TAS Gate Entry management
-elements.addGateEntry?.addEventListener('click', () => {
-    const entry = document.createElement('div');
-    entry.className = 'schedule-entry';
-    entry.innerHTML = `
-        <input type="text" class="input" placeholder="Gate States (예: 0xFF)" value="0x00">
-        <input type="number" class="input" placeholder="Time Interval (ns)" value="20000000">
-        <button class="btn-remove">×</button>
-    `;
-    elements.gateEntries.appendChild(entry);
-
-    entry.querySelector('.btn-remove').addEventListener('click', () => entry.remove());
-});
-
-// Initialize remove buttons for existing entries
-document.querySelectorAll('.schedule-entry .btn-remove').forEach(btn => {
-    btn.addEventListener('click', () => btn.parentElement.remove());
-});
-
-// Check WebSerial support
-if (!('serial' in navigator)) {
-    showToast('이 브라우저는 WebSerial을 지원하지 않습니다. Chrome 또는 Edge를 사용해주세요.', 'error');
-    elements.connectBtn.disabled = true;
-    addTerminalLine('WebSerial을 지원하지 않는 브라우저입니다.', 'error');
-}
-
-// Initial state
-addTerminalLine(`[${formatTimestamp()}] KETI TSN WebSerial 초기화 완료`, 'system');
-addTerminalLine('Chrome/Edge 브라우저에서 사용해주세요. 연결 버튼을 클릭하여 시작하세요.', 'system');
+// Initialize
+updateConnectionUI(false);
+console.log('VelocityDRIVE-SP WebSerial ready');

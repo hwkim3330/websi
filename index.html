@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KETI TSN WebSerial</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2'><path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>">
+    <title>VelocityDRIVE-SP WebSerial</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><rect x='3' y='3' width='18' height='18' rx='3'/></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -16,257 +16,170 @@
         <header class="header">
             <div class="header-left">
                 <div class="logo">
-                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                        <path d="M2 17l10 5 10-5"/>
-                        <path d="M2 12l10 5 10-5"/>
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="3" y="3" width="18" height="18" rx="3"/>
+                        <rect x="7" y="7" width="4" height="4" rx="1" fill="white"/>
+                        <rect x="13" y="7" width="4" height="4" rx="1" fill="white"/>
+                        <rect x="7" y="13" width="4" height="4" rx="1" fill="white"/>
+                        <rect x="13" y="13" width="4" height="4" rx="1" fill="white"/>
                     </svg>
-                    <span class="logo-text">KETI TSN</span>
+                    <div class="logo-text">
+                        <span class="logo-title">VelocityDRIVE-SP</span>
+                        <span class="logo-sub">LAN9662 TSN Switch</span>
+                    </div>
                 </div>
-                <span class="version">WebSerial v1.0</span>
             </div>
             <div class="header-right">
-                <div class="connection-status" id="connectionStatus">
-                    <span class="status-dot"></span>
-                    <span class="status-text">연결 안됨</span>
+                <div class="connection-badge" id="connectionBadge">
+                    <span class="badge-dot"></span>
+                    <span class="badge-text">연결 안됨</span>
                 </div>
-                <button class="btn btn-primary" id="connectBtn">
+                <button class="btn-connect" id="connectBtn">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
                     </svg>
-                    연결
+                    <span>연결</span>
                 </button>
             </div>
         </header>
 
         <!-- Main Content -->
-        <main class="main">
-            <!-- Sidebar -->
-            <aside class="sidebar">
-                <nav class="nav">
-                    <button class="nav-item active" data-panel="dashboard">
+        <main class="main-content">
+            <!-- Left Column: Status & Control -->
+            <div class="column column-left">
+                <!-- Device Status Card -->
+                <section class="card" id="deviceCard">
+                    <div class="card-title">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="7" height="7"/>
-                            <rect x="14" y="3" width="7" height="7"/>
-                            <rect x="14" y="14" width="7" height="7"/>
-                            <rect x="3" y="14" width="7" height="7"/>
+                            <rect x="4" y="4" width="16" height="16" rx="2"/>
+                            <circle cx="12" cy="12" r="2"/>
                         </svg>
-                        <span>대시보드</span>
-                    </button>
-                    <button class="nav-item" data-panel="config">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                        </svg>
-                        <span>설정 조회</span>
-                    </button>
-                    <button class="nav-item" data-panel="tsn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-                        </svg>
-                        <span>TSN 제어</span>
-                    </button>
-                    <button class="nav-item" data-panel="terminal">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="4 17 10 11 4 5"/>
-                            <line x1="12" y1="19" x2="20" y2="19"/>
-                        </svg>
-                        <span>터미널</span>
-                    </button>
-                </nav>
-
-                <div class="sidebar-footer">
-                    <div class="device-info" id="deviceInfo">
-                        <div class="device-label">디바이스</div>
-                        <div class="device-value">-</div>
+                        <span>디바이스</span>
                     </div>
+                    <div class="card-content">
+                        <div class="device-status" id="deviceStatus">
+                            <div class="status-row">
+                                <span class="status-label">상태</span>
+                                <span class="status-value status-disconnected" id="statusValue">대기 중</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">플랫폼</span>
+                                <span class="status-value mono" id="platformValue">-</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">버전</span>
+                                <span class="status-value mono" id="versionValue">-</span>
+                            </div>
+                            <div class="status-row">
+                                <span class="status-label">YANG</span>
+                                <span class="status-value mono" id="yangValue">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Port Status Card -->
+                <section class="card" id="portCard">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="6" width="4" height="12" rx="1"/>
+                            <rect x="10" y="6" width="4" height="12" rx="1"/>
+                            <rect x="18" y="6" width="4" height="12" rx="1"/>
+                        </svg>
+                        <span>포트</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="port-grid" id="portGrid">
+                            <div class="port-item">
+                                <div class="port-icon port-down">1</div>
+                                <span class="port-name">eth0</span>
+                            </div>
+                            <div class="port-item">
+                                <div class="port-icon port-down">2</div>
+                                <span class="port-name">eth1</span>
+                            </div>
+                            <div class="port-item">
+                                <div class="port-icon port-down">3</div>
+                                <span class="port-name">eth2</span>
+                            </div>
+                            <div class="port-item">
+                                <div class="port-icon port-down">4</div>
+                                <span class="port-name">eth3</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Actions -->
+                <section class="card">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                        <span>빠른 명령</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="action-grid">
+                            <button class="action-btn" id="getChecksumBtn" disabled>체크섬</button>
+                            <button class="action-btn" id="fetchSystemBtn" disabled>시스템</button>
+                            <button class="action-btn" id="fetchBridgeBtn" disabled>브릿지</button>
+                            <button class="action-btn" id="fetchInterfacesBtn" disabled>인터페이스</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column: Configuration -->
+            <div class="column column-right">
+                <!-- Tabs -->
+                <div class="tabs" id="mainTabs">
+                    <button class="tab active" data-tab="query">조회</button>
+                    <button class="tab" data-tab="tsn">TSN 설정</button>
+                    <button class="tab" data-tab="terminal">터미널</button>
                 </div>
-            </aside>
 
-            <!-- Content Area -->
-            <div class="content">
-                <!-- Dashboard Panel -->
-                <section class="panel active" id="dashboardPanel">
-                    <div class="panel-header">
-                        <h2>대시보드</h2>
-                        <p>Microchip LAN9662 TSN 스위치 상태</p>
-                    </div>
-
-                    <div class="dashboard-grid">
-                        <div class="card">
-                            <div class="card-header">
-                                <h3>연결 상태</h3>
-                                <div class="card-icon status-icon" id="cardStatusIcon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
-                                        <line x1="12" y1="2" x2="12" y2="12"/>
-                                    </svg>
-                                </div>
+                <!-- Tab Contents -->
+                <div class="tab-contents">
+                    <!-- Query Tab -->
+                    <div class="tab-content active" id="queryTab">
+                        <div class="query-section">
+                            <label>YANG 경로</label>
+                            <div class="input-row">
+                                <input type="text" class="input" id="yangPathInput"
+                                       placeholder="/ietf-system:system-state/platform">
+                                <button class="btn-primary" id="fetchBtn" disabled>조회</button>
                             </div>
-                            <div class="card-body">
-                                <div class="stat">
-                                    <span class="stat-value" id="connStatusText">연결 대기</span>
-                                    <span class="stat-label">현재 상태</span>
-                                </div>
+                            <div class="quick-paths">
+                                <button class="path-btn" data-path="/ietf-system:system-state/platform">platform</button>
+                                <button class="path-btn" data-path="/ietf-interfaces:interfaces">interfaces</button>
+                                <button class="path-btn" data-path="/ieee802-dot1q-bridge:bridges">bridges</button>
+                                <button class="path-btn" data-path="/ieee1588-ptp:ptp">ptp</button>
                             </div>
                         </div>
-
-                        <div class="card">
-                            <div class="card-header">
-                                <h3>보드 정보</h3>
-                                <div class="card-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="4" y="4" width="16" height="16" rx="2"/>
-                                        <rect x="9" y="9" width="6" height="6"/>
-                                        <line x1="9" y1="1" x2="9" y2="4"/>
-                                        <line x1="15" y1="1" x2="15" y2="4"/>
-                                        <line x1="9" y1="20" x2="9" y2="23"/>
-                                        <line x1="15" y1="20" x2="15" y2="23"/>
-                                    </svg>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <div class="info-list">
-                                    <div class="info-item">
-                                        <span class="info-label">플랫폼</span>
-                                        <span class="info-value" id="platformInfo">-</span>
-                                    </div>
-                                    <div class="info-item">
-                                        <span class="info-label">버전</span>
-                                        <span class="info-value" id="versionInfo">-</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="card">
-                            <div class="card-header">
-                                <h3>YANG 캐시</h3>
-                                <div class="card-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                                        <line x1="12" y1="22.08" x2="12" y2="12"/>
-                                    </svg>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <div class="stat">
-                                    <span class="stat-value" id="yangCacheStatus">미확인</span>
-                                    <span class="stat-label">체크섬 상태</span>
-                                </div>
-                                <button class="btn btn-secondary btn-sm" id="downloadYangBtn" disabled>
-                                    YANG 카탈로그 다운로드
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="card card-wide">
-                            <div class="card-header">
-                                <h3>빠른 명령</h3>
-                            </div>
-                            <div class="card-body">
-                                <div class="quick-actions">
-                                    <button class="action-btn" id="getChecksumBtn" disabled>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <polyline points="9 11 12 14 22 4"/>
-                                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-                                        </svg>
-                                        <span>체크섬 조회</span>
-                                    </button>
-                                    <button class="action-btn" id="getConfigBtn" disabled>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                            <polyline points="14 2 14 8 20 8"/>
-                                            <line x1="16" y1="13" x2="8" y2="13"/>
-                                            <line x1="16" y1="17" x2="8" y2="17"/>
-                                        </svg>
-                                        <span>설정 백업</span>
-                                    </button>
-                                    <button class="action-btn" id="fetchSystemBtn" disabled>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <circle cx="12" cy="12" r="10"/>
-                                            <line x1="12" y1="16" x2="12" y2="12"/>
-                                            <line x1="12" y1="8" x2="12.01" y2="8"/>
-                                        </svg>
-                                        <span>시스템 정보</span>
-                                    </button>
-                                    <button class="action-btn" id="fetchBridgeBtn" disabled>
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-                                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-                                        </svg>
-                                        <span>브릿지 정보</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Config Panel -->
-                <section class="panel" id="configPanel">
-                    <div class="panel-header">
-                        <h2>설정 조회 (iFETCH)</h2>
-                        <p>YANG 경로를 사용하여 설정 조회</p>
-                    </div>
-
-                    <div class="config-container">
-                        <div class="config-input-section">
-                            <label for="yangPathInput">YANG 경로 (SID 또는 instance-identifier)</label>
-                            <div class="input-group">
-                                <input type="text" id="yangPathInput" placeholder="/ietf-system:system-state/platform" class="input">
-                                <button class="btn btn-primary" id="fetchBtn" disabled>조회</button>
-                            </div>
-                            <div class="path-examples">
-                                <span class="example-label">예제:</span>
-                                <button class="example-btn" data-path="/ietf-system:system-state/platform">system-state</button>
-                                <button class="example-btn" data-path="/ietf-interfaces:interfaces">interfaces</button>
-                                <button class="example-btn" data-path="/ieee802-dot1q-bridge:bridges">bridges</button>
-                                <button class="example-btn" data-path="/ieee1588-ptp:ptp">ptp</button>
-                            </div>
-                        </div>
-
-                        <div class="config-result-section">
+                        <div class="result-section">
                             <div class="result-header">
-                                <h3>조회 결과</h3>
-                                <button class="btn btn-secondary btn-sm" id="copyResultBtn">
+                                <span>결과</span>
+                                <button class="btn-icon" id="copyResultBtn" title="복사">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                        <rect x="9" y="9" width="13" height="13" rx="2"/>
+                                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
                                     </svg>
-                                    복사
                                 </button>
                             </div>
-                            <pre class="result-content" id="fetchResult">// 조회 결과가 여기에 표시됩니다</pre>
+                            <pre class="result-content" id="fetchResult">// 조회 결과</pre>
                         </div>
                     </div>
-                </section>
 
-                <!-- TSN Panel -->
-                <section class="panel" id="tsnPanel">
-                    <div class="panel-header">
-                        <h2>TSN 제어</h2>
-                        <p>CBS, TAS, FRER 등 TSN 기능 설정</p>
-                    </div>
-
-                    <div class="tsn-container">
-                        <div class="tsn-tabs">
-                            <button class="tsn-tab active" data-tab="cbs">CBS</button>
-                            <button class="tsn-tab" data-tab="tas">TAS</button>
-                            <button class="tsn-tab" data-tab="frer">FRER</button>
-                        </div>
-
-                        <div class="tsn-content">
-                            <!-- CBS Tab -->
-                            <div class="tsn-tab-panel active" id="cbsTab">
-                                <div class="tsn-section">
-                                    <h4>Credit-Based Shaper (IEEE 802.1Qav)</h4>
-                                    <p class="section-desc">트래픽 클래스별 대역폭 할당 설정</p>
-
-                                    <div class="form-group">
-                                        <label>포트 선택</label>
+                    <!-- TSN Tab -->
+                    <div class="tab-content" id="tsnTab">
+                        <div class="tsn-grid">
+                            <!-- CBS -->
+                            <div class="tsn-card">
+                                <h4>CBS (802.1Qav)</h4>
+                                <p>Credit-Based Shaper</p>
+                                <div class="form-grid">
+                                    <div class="form-field">
+                                        <label>Port</label>
                                         <select class="input" id="cbsPort">
                                             <option value="1">Port 1</option>
                                             <option value="2">Port 2</option>
@@ -274,32 +187,28 @@
                                             <option value="4">Port 4</option>
                                         </select>
                                     </div>
-
-                                    <div class="form-group">
-                                        <label>트래픽 클래스</label>
-                                        <select class="input" id="cbsTrafficClass">
-                                            <option value="2">TC2 (Priority 2)</option>
-                                            <option value="6">TC6 (Priority 6)</option>
+                                    <div class="form-field">
+                                        <label>TC</label>
+                                        <select class="input" id="cbsTc">
+                                            <option value="2">TC2</option>
+                                            <option value="6">TC6</option>
                                         </select>
                                     </div>
-
-                                    <div class="form-group">
+                                    <div class="form-field full">
                                         <label>Idle Slope (bps)</label>
-                                        <input type="number" class="input" id="cbsIdleSlope" value="1500000" placeholder="1500000">
+                                        <input type="number" class="input" id="cbsIdleSlope" value="1500000">
                                     </div>
-
-                                    <button class="btn btn-primary" id="applyCbsBtn" disabled>CBS 설정 적용</button>
                                 </div>
+                                <button class="btn-primary" id="applyCbsBtn" disabled>적용</button>
                             </div>
 
-                            <!-- TAS Tab -->
-                            <div class="tsn-tab-panel" id="tasTab">
-                                <div class="tsn-section">
-                                    <h4>Time-Aware Shaper (IEEE 802.1Qbv)</h4>
-                                    <p class="section-desc">시간 기반 트래픽 스케줄링</p>
-
-                                    <div class="form-group">
-                                        <label>포트 선택</label>
+                            <!-- TAS -->
+                            <div class="tsn-card">
+                                <h4>TAS (802.1Qbv)</h4>
+                                <p>Time-Aware Shaper</p>
+                                <div class="form-grid">
+                                    <div class="form-field">
+                                        <label>Port</label>
                                         <select class="input" id="tasPort">
                                             <option value="1">Port 1</option>
                                             <option value="2">Port 2</option>
@@ -307,80 +216,62 @@
                                             <option value="4">Port 4</option>
                                         </select>
                                     </div>
-
-                                    <div class="form-group">
-                                        <label>사이클 타임 (ns)</label>
-                                        <input type="number" class="input" id="tasCycleTime" value="200000000" placeholder="200000000">
+                                    <div class="form-field">
+                                        <label>Cycle (ms)</label>
+                                        <input type="number" class="input" id="tasCycle" value="200">
                                     </div>
-
-                                    <div class="tas-schedule" id="tasSchedule">
-                                        <div class="schedule-header">
-                                            <span>Gate Control List</span>
-                                            <button class="btn btn-secondary btn-sm" id="addGateEntry">+ 엔트리 추가</button>
-                                        </div>
-                                        <div class="schedule-entries" id="gateEntries">
-                                            <div class="schedule-entry">
-                                                <input type="text" class="input" placeholder="Gate States (예: 0xFF)" value="0xFF">
-                                                <input type="number" class="input" placeholder="Time Interval (ns)" value="50000000">
-                                                <button class="btn-remove">×</button>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button class="btn btn-primary" id="applyTasBtn" disabled>TAS 설정 적용</button>
                                 </div>
+                                <button class="btn-primary" id="applyTasBtn" disabled>적용</button>
                             </div>
 
-                            <!-- FRER Tab -->
-                            <div class="tsn-tab-panel" id="frerTab">
-                                <div class="tsn-section">
-                                    <h4>Frame Replication and Elimination (IEEE 802.1CB)</h4>
-                                    <p class="section-desc">프레임 복제 및 제거를 통한 고신뢰성 네트워킹</p>
-
-                                    <div class="coming-soon">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <circle cx="12" cy="12" r="10"/>
-                                            <polyline points="12 6 12 12 16 14"/>
-                                        </svg>
-                                        <span>곧 지원 예정</span>
+                            <!-- PTP -->
+                            <div class="tsn-card">
+                                <h4>PTP (1588)</h4>
+                                <p>Precision Time Protocol</p>
+                                <div class="form-grid">
+                                    <div class="form-field full">
+                                        <label>Mode</label>
+                                        <select class="input" id="ptpMode">
+                                            <option value="bc">Boundary Clock</option>
+                                            <option value="tc">Transparent Clock</option>
+                                        </select>
                                     </div>
                                 </div>
+                                <button class="btn-primary" id="applyPtpBtn" disabled>적용</button>
+                            </div>
+
+                            <!-- FRER -->
+                            <div class="tsn-card disabled">
+                                <h4>FRER (802.1CB)</h4>
+                                <p>Frame Replication</p>
+                                <div class="coming-soon">준비 중</div>
                             </div>
                         </div>
                     </div>
-                </section>
 
-                <!-- Terminal Panel -->
-                <section class="panel" id="terminalPanel">
-                    <div class="panel-header">
-                        <h2>터미널</h2>
-                        <p>시리얼 통신 로그 및 디버깅</p>
-                    </div>
-
-                    <div class="terminal-container">
+                    <!-- Terminal Tab -->
+                    <div class="tab-content" id="terminalTab">
                         <div class="terminal-toolbar">
-                            <button class="btn btn-secondary btn-sm" id="clearTerminalBtn">
+                            <button class="btn-icon" id="clearTerminalBtn" title="지우기">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 6h18"/>
-                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                                    <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                                 </svg>
-                                지우기
                             </button>
-                            <label class="checkbox-label">
+                            <label class="toggle-label">
                                 <input type="checkbox" id="autoScrollCheck" checked>
-                                자동 스크롤
+                                <span>자동 스크롤</span>
                             </label>
-                            <label class="checkbox-label">
+                            <label class="toggle-label">
                                 <input type="checkbox" id="showHexCheck">
-                                HEX 표시
+                                <span>HEX</span>
                             </label>
                         </div>
                         <div class="terminal-output" id="terminalOutput">
-                            <div class="terminal-line system">WebSerial 터미널 준비됨. 장치를 연결하세요.</div>
+                            <div class="terminal-line system">터미널 준비됨</div>
                         </div>
                     </div>
-                </section>
+                </div>
             </div>
         </main>
     </div>
@@ -396,9 +287,6 @@
 
     <!-- Scripts -->
     <script src="js/cbor.min.js"></script>
-    <script type="module" src="js/mup1.js"></script>
-    <script type="module" src="js/coap.js"></script>
-    <script type="module" src="js/webserial.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>
