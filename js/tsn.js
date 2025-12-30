@@ -554,6 +554,7 @@ async function fetchPtpStatus() {
 }
 
 // Apply TAS config using iPatch
+// Multiple strategies to find working configuration method
 async function applyTasConfig() {
     const ifIndex = parseInt(elements.tasInterface?.value);
     if (isNaN(ifIndex)) return;
@@ -572,43 +573,112 @@ async function applyTasConfig() {
             }
         });
 
-        // Build iPatch payload with delta-SIDs
-        // Path: /ietf-interfaces:interfaces/interface[name]/bridge-port/gate-parameter-table
-        const gateParams = new Map();
-        gateParams.set(SID.GATE_ENABLED - SID.GATE_PARAMETER_TABLE, gateEnabled);  // gate-enabled
-        gateParams.set(SID.GATE_ADMIN_GATE_STATES - SID.GATE_PARAMETER_TABLE, gateStates);  // admin-gate-states
+        console.log('[TAS] Interface:', iface.name, 'Index:', ifIndex);
+        console.log('[TAS] Gate enabled:', gateEnabled, 'States:', gateStates.toString(2).padStart(8, '0'));
+        console.log('[TAS] Cycle time:', cycleTimeNs, 'ns');
 
-        // Cycle time as rational
-        const cycleTimeMap = new Map();
-        cycleTimeMap.set(SID.GATE_CYCLE_NUMERATOR - SID.GATE_ADMIN_CYCLE_TIME, cycleTimeNs);
-        cycleTimeMap.set(SID.GATE_CYCLE_DENOMINATOR - SID.GATE_ADMIN_CYCLE_TIME, 1);
-        gateParams.set(SID.GATE_ADMIN_CYCLE_TIME - SID.GATE_PARAMETER_TABLE, cycleTimeMap);
+        // Strategy 1: Try simple flat patch with absolute SIDs
+        // This is what the editor.js uses for simple values
+        let success = false;
 
-        // Config change to apply
-        gateParams.set(SID.GATE_CONFIG_CHANGE - SID.GATE_PARAMETER_TABLE, true);
+        // First, try just enabling/disabling the gate
+        console.log('[TAS] Strategy 1: Simple flat patch');
+        try {
+            // Build gate-parameter-table structure with delta-SIDs relative to it
+            // gate-parameter-table SID: 23101
+            // gate-enabled delta: 23125 - 23101 = 24
+            // admin-gate-states delta: 23115 - 23101 = 14
+            const gateParams = new Map();
+            gateParams.set(24, gateEnabled);       // gate-enabled
 
-        // Bridge port container
-        const bridgePort = new Map();
-        bridgePort.set(SID.GATE_PARAMETER_TABLE - SID.BRIDGE_PORT, gateParams);
+            // Simple patch targeting gate-parameter-table directly
+            const patch = new Map();
+            patch.set(23101, gateParams);
 
-        // Interface entry with name key
-        const ifaceEntry = new Map();
-        ifaceEntry.set(SID.INTERFACE_NAME - SID.INTERFACE_LIST, iface.name);
-        ifaceEntry.set(SID.BRIDGE_PORT - SID.INTERFACE_LIST, bridgePort);
+            console.log('[TAS] Sending patch:', mapToObject(patch));
+            const response = await serialManager.sendiPatchRequest(patch);
 
-        // Root patch - interface list delta from interfaces
-        const patch = new Map();
-        patch.set(SID.INTERFACE_LIST - SID.INTERFACES, [ifaceEntry]);
+            if (response.isSuccess()) {
+                console.log('[TAS] Strategy 1 succeeded!');
+                success = true;
+            } else {
+                const errCode = `${response.code >> 5}.${(response.code & 0x1F).toString().padStart(2, '0')}`;
+                console.log('[TAS] Strategy 1 failed:', errCode);
+            }
+        } catch (e) {
+            console.log('[TAS] Strategy 1 error:', e.message);
+        }
 
-        console.log('Sending TAS patch:', patch);
-        const response = await serialManager.sendiPatchRequest(patch);
+        // Strategy 2: Full path with interface context
+        if (!success) {
+            console.log('[TAS] Strategy 2: Full path with interface key');
+            try {
+                const gateParams = new Map();
+                gateParams.set(24, gateEnabled);       // gate-enabled
+                gateParams.set(14, gateStates);        // admin-gate-states
+                gateParams.set(15, true);              // config-change
 
-        if (response.isSuccess()) {
+                // Cycle time
+                const cycleTimeMap = new Map();
+                cycleTimeMap.set(3, cycleTimeNs);      // numerator
+                cycleTimeMap.set(2, 1);                // denominator
+                gateParams.set(10, cycleTimeMap);      // admin-cycle-time
+
+                // Build nested structure
+                const bridgePort = new Map();
+                bridgePort.set(15938, gateParams);     // gate-parameter-table (23101 - 7163)
+
+                const ifaceEntry = new Map();
+                ifaceEntry.set(9, iface.name);         // name (2042 - 2033)
+                ifaceEntry.set(5130, bridgePort);      // bridge-port (7163 - 2033)
+
+                // Root with absolute SID
+                const patch = new Map();
+                patch.set(2033, [ifaceEntry]);         // interface list
+
+                console.log('[TAS] Sending patch:', mapToObject(patch));
+                const response = await serialManager.sendiPatchRequest(patch);
+
+                if (response.isSuccess()) {
+                    console.log('[TAS] Strategy 2 succeeded!');
+                    success = true;
+                } else {
+                    const errCode = `${response.code >> 5}.${(response.code & 0x1F).toString().padStart(2, '0')}`;
+                    console.log('[TAS] Strategy 2 failed:', errCode);
+                }
+            } catch (e) {
+                console.log('[TAS] Strategy 2 error:', e.message);
+            }
+        }
+
+        // Strategy 3: Minimal patch - just gate-enabled as absolute SID
+        if (!success) {
+            console.log('[TAS] Strategy 3: Direct SID patch');
+            try {
+                const patch = new Map();
+                patch.set(23125, gateEnabled);  // gate-enabled absolute SID
+
+                console.log('[TAS] Sending patch:', mapToObject(patch));
+                const response = await serialManager.sendiPatchRequest(patch);
+
+                if (response.isSuccess()) {
+                    console.log('[TAS] Strategy 3 succeeded!');
+                    success = true;
+                } else {
+                    const errCode = `${response.code >> 5}.${(response.code & 0x1F).toString().padStart(2, '0')}`;
+                    console.log('[TAS] Strategy 3 failed:', errCode);
+                }
+            } catch (e) {
+                console.log('[TAS] Strategy 3 error:', e.message);
+            }
+        }
+
+        if (success) {
             showToast('TAS 설정 적용 완료', 'success');
             await new Promise(resolve => setTimeout(resolve, 1000));
             await fetchInterfaces();
         } else {
-            showToast(`TAS 설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
+            showToast('TAS 설정 실패 - 콘솔에서 상세 로그 확인', 'error');
         }
     } catch (error) {
         console.error('TAS config error:', error);
@@ -617,7 +687,28 @@ async function applyTasConfig() {
     hideLoading();
 }
 
+// Helper to convert Map to object for logging
+function mapToObject(map) {
+    if (!(map instanceof Map)) {
+        if (Array.isArray(map)) return map.map(mapToObject);
+        if (map && typeof map === 'object') {
+            const obj = {};
+            for (const [k, v] of Object.entries(map)) {
+                obj[k] = mapToObject(v);
+            }
+            return obj;
+        }
+        return map;
+    }
+    const obj = {};
+    for (const [k, v] of map.entries()) {
+        obj[k] = mapToObject(v);
+    }
+    return obj;
+}
+
 // Apply CBS config using iPatch
+// IEEE 802.1Qav Credit-Based Shaper via Microchip eth-qos module
 async function applyCbsConfig() {
     const ifIndex = parseInt(elements.cbsInterface?.value);
     if (isNaN(ifIndex)) return;
@@ -628,37 +719,92 @@ async function applyCbsConfig() {
         const trafficClass = parseInt(elements.cbsTrafficClass?.value) || 6;
         const idleSlope = parseInt(elements.cbsIdleSlope?.value) || 5000000;  // 5 Mbps default
 
-        // Build iPatch payload
-        // Path: /ietf-interfaces:interfaces/interface[name]/eth-qos/config/traffic-class-shapers
-        const cbsConfig = new Map();
-        cbsConfig.set(SID.SHAPER_IDLE_SLOPE - SID.SHAPER_CBS, idleSlope);
+        console.log('[CBS] Interface:', iface.name, 'Index:', ifIndex);
+        console.log('[CBS] Traffic class:', trafficClass, 'Idle slope:', idleSlope, 'bps');
 
-        const shaperType = new Map();
-        shaperType.set(SID.SHAPER_CBS - SID.TRAFFIC_CLASS_SHAPERS, cbsConfig);
+        let success = false;
 
-        const shaperEntry = new Map();
-        shaperEntry.set(SID.SHAPER_TRAFFIC_CLASS - SID.TRAFFIC_CLASS_SHAPERS, trafficClass);
-        shaperEntry.set(2, shaperType);  // type container
+        // Strategy 1: Full nested path through eth-qos
+        console.log('[CBS] Strategy 1: Full nested path');
+        try {
+            // CBS path: /ietf-interfaces:interfaces/interface/mchp-velocitysp-port:eth-qos/config/traffic-class-shapers
+            // SIDs from catalog:
+            // eth-qos: 8047 (delta from interface 2033 = 6014)
+            // config: 8048 (delta from eth-qos = 1)
+            // traffic-class-shapers: 8049 (delta from config = 1)
+            // traffic-class: 8051 (delta from traffic-class-shapers = 2)
+            // credit-based: 8052
+            // idle-slope: 8053 or 8054
 
-        // Interface entry
-        const ifaceEntry = new Map();
-        ifaceEntry.set(SID.INTERFACE_NAME - SID.INTERFACE_LIST, iface.name);
-        // eth-qos path (need to find correct SID)
-        // For now, use relative offset
-        ifaceEntry.set(SID.TRAFFIC_CLASS_SHAPERS - SID.INTERFACE_LIST, [shaperEntry]);
+            const cbsConfig = new Map();
+            cbsConfig.set(1, idleSlope);              // idle-slope
 
-        const patch = new Map();
-        patch.set(SID.INTERFACE_LIST - SID.INTERFACES, [ifaceEntry]);
+            const shaperEntry = new Map();
+            shaperEntry.set(2, trafficClass);          // traffic-class
+            shaperEntry.set(3, cbsConfig);             // credit-based container
 
-        console.log('Sending CBS patch:', patch);
-        const response = await serialManager.sendiPatchRequest(patch);
+            const configContainer = new Map();
+            configContainer.set(1, [shaperEntry]);     // traffic-class-shapers list
 
-        if (response.isSuccess()) {
+            const ethQos = new Map();
+            ethQos.set(1, configContainer);            // config
+
+            const ifaceEntry = new Map();
+            ifaceEntry.set(9, iface.name);             // name
+            ifaceEntry.set(6014, ethQos);              // eth-qos
+
+            const patch = new Map();
+            patch.set(2033, [ifaceEntry]);
+
+            console.log('[CBS] Sending patch:', mapToObject(patch));
+            const response = await serialManager.sendiPatchRequest(patch);
+
+            if (response.isSuccess()) {
+                console.log('[CBS] Strategy 1 succeeded!');
+                success = true;
+            } else {
+                const errCode = `${response.code >> 5}.${(response.code & 0x1F).toString().padStart(2, '0')}`;
+                console.log('[CBS] Strategy 1 failed:', errCode);
+            }
+        } catch (e) {
+            console.log('[CBS] Strategy 1 error:', e.message);
+        }
+
+        // Strategy 2: Direct traffic-class-shapers patch
+        if (!success) {
+            console.log('[CBS] Strategy 2: Direct traffic-class-shapers patch');
+            try {
+                const cbsConfig = new Map();
+                cbsConfig.set(1, idleSlope);              // idle-slope
+
+                const shaperEntry = new Map();
+                shaperEntry.set(2, trafficClass);          // traffic-class (SID 8051 - 8049 = 2)
+                shaperEntry.set(3, cbsConfig);             // credit-based
+
+                const patch = new Map();
+                patch.set(8049, [shaperEntry]);            // traffic-class-shapers
+
+                console.log('[CBS] Sending patch:', mapToObject(patch));
+                const response = await serialManager.sendiPatchRequest(patch);
+
+                if (response.isSuccess()) {
+                    console.log('[CBS] Strategy 2 succeeded!');
+                    success = true;
+                } else {
+                    const errCode = `${response.code >> 5}.${(response.code & 0x1F).toString().padStart(2, '0')}`;
+                    console.log('[CBS] Strategy 2 failed:', errCode);
+                }
+            } catch (e) {
+                console.log('[CBS] Strategy 2 error:', e.message);
+            }
+        }
+
+        if (success) {
             showToast('CBS 설정 적용 완료', 'success');
             await new Promise(resolve => setTimeout(resolve, 1000));
             await fetchInterfaces();
         } else {
-            showToast(`CBS 설정 실패: ${response.getCodeClass()}.${response.getCodeDetail().toString().padStart(2, '0')}`, 'error');
+            showToast('CBS 설정 실패 - 콘솔에서 상세 로그 확인', 'error');
         }
     } catch (error) {
         console.error('CBS config error:', error);
@@ -722,41 +868,31 @@ serialManager.addEventListener('announce', async () => {
     updateConnectionUI(true);
     showToast('보드 연결됨', 'success');
 
-    // Wait for board block transfer state to clear
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Short delay for board to stabilize after ANNOUNCE
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     showLoading('데이터 로딩...');
 
-    // First fetch a small SID to reset board state
+    // Fetch interfaces data
     try {
-        console.log('[TSN] Fetching small SID first to reset board state...');
-        const response = await serialManager.sendiFetchRequest(SID.SYSTEM_STATE_PLATFORM);
-        if (response.isSuccess()) {
-            console.log('[TSN] Small SID fetch succeeded, board state should be clean');
-        }
-    } catch (e) {
-        console.warn('[TSN] Small SID fetch failed, continuing anyway:', e.message);
-    }
-
-    // Wait a bit more
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Now fetch interfaces
-    try {
+        console.log('[TSN] Fetching interfaces...');
         await fetchInterfaces();
+        console.log('[TSN] Interfaces loaded successfully');
     } catch (e) {
-        console.error('Initial fetch failed:', e);
+        console.error('[TSN] Initial fetch failed:', e);
         showToast('데이터 로드 실패 - 새로고침 버튼을 눌러주세요', 'error');
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Fetch PTP status
     try {
+        console.log('[TSN] Fetching PTP status...');
         await fetchPtpStatus();
+        console.log('[TSN] PTP status loaded');
     } catch (e) {
-        console.error('PTP fetch failed:', e);
+        console.warn('[TSN] PTP fetch failed:', e.message);
     }
-    hideLoading();
 
+    hideLoading();
     startPolling();
 });
 

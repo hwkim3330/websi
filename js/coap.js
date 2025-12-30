@@ -288,6 +288,10 @@ export function buildiFetchRequest(query, options = {}) {
 
 /**
  * Build iPATCH request
+ * contentFormat options:
+ *   - 140: yang-data+cbor-sid (YANG_DATA_CBOR_SID)
+ *   - 141: yang-identifiers+cbor (YANG_IDENTIFIERS_CBOR)
+ *   - 142: yang-instances+cbor (YANG_INSTANCES_CBOR) [default]
  */
 export function buildiPatchRequest(patch, options = {}) {
     let payload;
@@ -298,13 +302,18 @@ export function buildiPatchRequest(patch, options = {}) {
         payload = new Uint8Array(encoded);
     }
 
+    // Allow customizing content format - default to 140 (yang-data+cbor-sid)
+    const contentFormat = options.contentFormat !== undefined
+        ? options.contentFormat
+        : ContentFormat.YANG_DATA_CBOR_SID;
+
     return buildMessage({
         type: MessageType.CON,
         code: MethodCode.IPATCH,
         token: options.token || new Uint8Array(0),
         options: [
             { number: OptionNumber.URI_PATH, value: 'c' },
-            { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_INSTANCES_CBOR },
+            { number: OptionNumber.CONTENT_FORMAT, value: contentFormat },
             { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_DATA_CBOR_SID }
         ],
         payload,

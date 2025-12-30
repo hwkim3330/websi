@@ -333,30 +333,33 @@ export class WebSerialManager extends EventTarget {
     }
 
     /**
-     * Internal iFETCH implementation
+     * Internal iFETCH implementation with proper Block2 handling
+     * - ETag verification for response integrity
+     * - Size2 option for expected size
+     * - CBOR validation after assembly
      */
     async _sendiFetchRequestInternal(query, options = {}) {
         const payloads = [];
         let lastResponse = null;
+        let expectedETag = null;
+        let expectedSize = null;
 
-        // Use 8-byte token for maximum uniqueness to avoid session conflicts
+        // Use 4-byte token (sufficient for session uniqueness, smaller overhead)
         const token = options.token || new Uint8Array([
-            Math.floor(Math.random() * 256),
-            Math.floor(Math.random() * 256),
-            Math.floor(Math.random() * 256),
-            Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256),
             Math.floor(Math.random() * 256)
         ]);
 
-        // SZX=1 (32 bytes) is safer for MUP1 frame limit
-        const szx = options.blockSize !== undefined ? options.blockSize : 1;
+        // SZX=2 (64 bytes) - balance between overhead and reliability
+        const szx = options.blockSize !== undefined ? options.blockSize : 2;
 
-        // Initial request WITH Block2 NUM=0 to request small block size
+        // Initial request WITH Block2 NUM=0
         const initialMessageId = Math.floor(Math.random() * 65536);
         const block2Value = encodeBlock2Value(0, false, szx);
+
+        console.log(`[Block2] Starting transfer for SID ${query}, token=${this._toHex(token)}, szx=${szx}`);
 
         const coapFrame = buildMessage({
             type: MessageType.CON,
@@ -380,16 +383,36 @@ export class WebSerialManager extends EventTarget {
             throw new Error(`iFETCH failed with code ${firstResponse.code}`);
         }
 
+        // Extract ETag for verification (RFC 7959 recommends this)
+        const etagOpt = firstResponse.options.find(o => o.number === OptionNumber.ETAG);
+        if (etagOpt) {
+            expectedETag = etagOpt.value;
+            console.log(`[Block2] ETag: ${this._toHex(expectedETag)}`);
+        }
+
+        // Extract Size2 if available (expected total size)
+        const size2Opt = firstResponse.options.find(o => o.number === 28); // SIZE2 = 28
+        if (size2Opt) {
+            expectedSize = 0;
+            for (let i = 0; i < size2Opt.value.length; i++) {
+                expectedSize = (expectedSize << 8) | size2Opt.value[i];
+            }
+            console.log(`[Block2] Expected size: ${expectedSize} bytes`);
+        }
+
         if (firstResponse.payload) {
             payloads.push(firstResponse.payload);
         }
 
-        // Check for Block2 in response (server-initiated block transfer)
+        // Check for Block2 in response
         let block2 = firstResponse.getBlock2Value();
         let more = block2 ? block2.m : false;
         let blockNum = block2 ? block2.num : 0;
+        const blockSize = block2 ? block2.size : (1 << (szx + 4));
 
-        // Fetch remaining blocks if needed
+        console.log(`[Block2] Block 0: ${firstResponse.payload?.length || 0} bytes, more=${more}`);
+
+        // Fetch remaining blocks
         const BLOCK_RETRY_MAX = 3;
         while (more) {
             blockNum++;
@@ -397,26 +420,24 @@ export class WebSerialManager extends EventTarget {
             let blockSuccess = false;
             for (let retry = 0; retry < BLOCK_RETRY_MAX && !blockSuccess; retry++) {
                 try {
-                    // Small delay between blocks
                     if (retry > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 200 * retry));
+                        await new Promise(resolve => setTimeout(resolve, 100 * (retry + 1)));
                     }
 
                     const messageId = Math.floor(Math.random() * 65536);
                     const block2Value = encodeBlock2Value(blockNum, false, block2.szx);
-                    const block2Option = { number: OptionNumber.BLOCK2, value: block2Value };
 
                     const continuationFrame = buildMessage({
                         type: MessageType.CON,
                         code: MethodCode.FETCH,
                         messageId,
-                        token,
+                        token,  // Same token for entire transfer
                         options: [
                             { number: OptionNumber.URI_PATH, value: 'c' },
                             { number: OptionNumber.URI_QUERY, value: 'd=a' },
                             { number: OptionNumber.CONTENT_FORMAT, value: ContentFormat.YANG_IDENTIFIERS_CBOR },
                             { number: OptionNumber.ACCEPT, value: ContentFormat.YANG_INSTANCES_CBOR },
-                            block2Option
+                            { number: OptionNumber.BLOCK2, value: block2Value }
                         ],
                         payload: new Uint8Array(CBOR.encode(query))
                     });
@@ -425,8 +446,17 @@ export class WebSerialManager extends EventTarget {
                     lastResponse = coapResponse;
 
                     if (!coapResponse.isSuccess()) {
-                        console.warn(`Block ${blockNum} failed with code ${coapResponse.code}, retry ${retry + 1}`);
+                        console.warn(`[Block2] Block ${blockNum} failed: code ${coapResponse.code}, retry ${retry + 1}`);
                         continue;
+                    }
+
+                    // Verify ETag matches (if present)
+                    if (expectedETag) {
+                        const respEtag = coapResponse.options.find(o => o.number === OptionNumber.ETAG);
+                        if (respEtag && !this._arraysEqual(respEtag.value, expectedETag)) {
+                            console.warn(`[Block2] ETag mismatch at block ${blockNum}, restarting transfer`);
+                            throw new Error('ETag mismatch - response changed during transfer');
+                        }
                     }
 
                     if (coapResponse.payload) {
@@ -440,9 +470,11 @@ export class WebSerialManager extends EventTarget {
                     } else {
                         more = false;
                     }
+
+                    console.log(`[Block2] Block ${blockNum}: ${coapResponse.payload?.length || 0} bytes, more=${more}`);
                     blockSuccess = true;
                 } catch (blockErr) {
-                    console.warn(`Block ${blockNum} error: ${blockErr.message}, retry ${retry + 1}`);
+                    console.warn(`[Block2] Block ${blockNum} error: ${blockErr.message}, retry ${retry + 1}`);
                 }
             }
 
@@ -451,9 +483,16 @@ export class WebSerialManager extends EventTarget {
             }
         }
 
-        // Assemble payload if multiple blocks
+        // Assemble and validate payload
+        const totalLength = payloads.reduce((sum, p) => sum + p.length, 0);
+        console.log(`[Block2] Transfer complete: ${payloads.length} blocks, ${totalLength} bytes total`);
+
+        // Verify size if expected
+        if (expectedSize !== null && totalLength !== expectedSize) {
+            console.warn(`[Block2] Size mismatch: expected ${expectedSize}, got ${totalLength}`);
+        }
+
         if (payloads.length > 1) {
-            const totalLength = payloads.reduce((sum, p) => sum + p.length, 0);
             const assembledPayload = new Uint8Array(totalLength);
             let offset = 0;
             for (const p of payloads) {
@@ -461,21 +500,42 @@ export class WebSerialManager extends EventTarget {
                 offset += p.length;
             }
 
-            return {
-                ...lastResponse,
-                payload: assembledPayload,
-                getPayloadAsCBOR: () => {
-                    if (assembledPayload.length === 0) return null;
+            // Validate CBOR can be decoded
+            const validateCBOR = () => {
+                try {
                     const buffer = assembledPayload.buffer.slice(
                         assembledPayload.byteOffset,
                         assembledPayload.byteOffset + assembledPayload.byteLength
                     );
                     return CBOR.decode(buffer);
+                } catch (e) {
+                    console.error(`[Block2] CBOR validation failed: ${e.message}`);
+                    throw new Error(`Corrupted payload: CBOR decode failed - ${e.message}`);
                 }
+            };
+
+            return {
+                ...lastResponse,
+                payload: assembledPayload,
+                blockCount: payloads.length,
+                totalSize: totalLength,
+                getPayloadAsCBOR: validateCBOR
             };
         }
 
         return lastResponse;
+    }
+
+    /**
+     * Compare two Uint8Arrays
+     */
+    _arraysEqual(a, b) {
+        if (!a || !b) return false;
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return false;
+        }
+        return true;
     }
 
     /**
