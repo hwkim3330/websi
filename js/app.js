@@ -100,29 +100,76 @@ function updateConnectionUI(connected) {
 }
 
 // YANG Catalog
-async function loadYangCatalog(checksumHex) {
-    log(`YANG 카탈로그 로딩: ${checksumHex}`, 'info');
+async function loadSingleCatalog(checksumHex) {
+    console.log(`[CATALOG] Loading catalog: ${checksumHex}`);
     try {
         const response = await fetch(`./js/catalogs/${checksumHex}.json`);
         if (!response.ok) throw new Error('Catalog not found');
 
         const data = await response.json();
+        let count = 0;
         for (const [path, sid] of Object.entries(data.pathToSid)) {
             yangCatalog.sidMap.set(path, sid);
         }
-        yangCatalog.sidToPath = new Map(
-            Object.entries(data.sidToPath).map(([k, v]) => [parseInt(k), v])
-        );
-        yangCatalog.checksum = checksumHex;
+        for (const [sid, path] of Object.entries(data.sidToPath)) {
+            yangCatalog.sidToPath.set(parseInt(sid), path);
+            count++;
+        }
+        console.log(`[CATALOG] Loaded ${count} SIDs from ${checksumHex}`);
+        return count;
+    } catch (error) {
+        console.log(`[CATALOG] Failed to load ${checksumHex}: ${error.message}`);
+        return 0;
+    }
+}
+
+async function loadAllCatalogs() {
+    log(`모든 YANG 카탈로그 로딩 중...`, 'info');
+    console.log('[CATALOG] Loading ALL catalogs...');
+    try {
+        const indexResponse = await fetch('./js/catalogs/index.json');
+        if (!indexResponse.ok) throw new Error('Catalog index not found');
+
+        const index = await indexResponse.json();
+        console.log(`[CATALOG] Found ${index.checksums.length} catalogs`);
+
+        let totalLoaded = 0;
+        for (const checksum of index.checksums) {
+            const count = await loadSingleCatalog(checksum);
+            totalLoaded += count;
+        }
+
         log(`카탈로그 로드 완료: ${yangCatalog.sidToPath.size}개 SID`, 'success');
+        console.log(`[CATALOG] Total loaded: ${yangCatalog.sidToPath.size} SIDs`);
         return true;
     } catch (error) {
         log(`카탈로그 로드 실패: ${error.message}`, 'error');
+        console.error('[CATALOG] Failed to load catalogs:', error);
         return false;
     }
 }
 
+async function loadYangCatalog(checksumHex) {
+    log(`YANG 카탈로그 로딩: ${checksumHex}`, 'info');
+    const count = await loadSingleCatalog(checksumHex);
+
+    if (count > 0) {
+        yangCatalog.checksum = checksumHex;
+        log(`카탈로그 로드 완료: ${yangCatalog.sidToPath.size}개 SID`, 'success');
+        return true;
+    }
+
+    // Checksum not found - load all catalogs as fallback
+    log(`체크섬 ${checksumHex} 없음 - 전체 카탈로그 로딩`, 'info');
+    return await loadAllCatalogs();
+}
+
 function getSidName(sid) {
+    // Debug: check catalog status
+    if (yangCatalog.sidToPath.size === 0) {
+        console.warn('[CATALOG] WARNING: sidToPath is EMPTY! Catalog not loaded?');
+    }
+
     if (yangCatalog.sidToPath.has(sid)) {
         const path = yangCatalog.sidToPath.get(sid);
         const parts = path.split('/');
@@ -457,11 +504,14 @@ async function fetchAllData() {
 async function fetchChecksum() {
     try {
         const query = [29304];
+        console.log('[CHECKSUM] Fetching checksum from device...');
         const response = await serialManager.sendiFetchRequest(query);
 
         if (response.isSuccess() && response.payload) {
             const data = response.getPayloadAsCBOR();
             let checksumHex = null;
+
+            console.log('[CHECKSUM] Response data:', data);
 
             if (data instanceof Map) {
                 for (const value of data.values()) {
@@ -470,11 +520,21 @@ async function fetchChecksum() {
             }
 
             if (checksumHex) {
+                console.log(`[CHECKSUM] Device checksum: ${checksumHex}`);
                 await loadYangCatalog(checksumHex);
+                return;
             }
         }
+
+        // No checksum received - load all catalogs
+        log('체크섬 없음 - 전체 카탈로그 로딩', 'info');
+        await loadAllCatalogs();
     } catch (error) {
         log(`체크섬 조회 실패: ${error.message}`, 'error');
+        console.error('[CHECKSUM] Error:', error);
+        // Fallback: load all catalogs
+        log('폴백: 전체 카탈로그 로딩', 'info');
+        await loadAllCatalogs();
     }
 }
 
