@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VelocityDRIVE-SP TSN Config</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f59e0b'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0f0f0f;
+            --bg-card: #1a1a1a;
+            --bg-input: #252525;
+            --bg-hover: #2a2a2a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #808080;
+            --text-muted: #505050;
+            --accent: #f59e0b;
+            --accent-dim: #b45309;
+            --green: #22c55e;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --border: #303030;
+            --radius: 8px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+            font-size: 14px;
+            background: var(--bg-main);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo svg {
+            width: 28px;
+            height: 28px;
+            color: var(--accent);
+        }
+
+        .logo-text {
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .logo-sub {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: var(--bg-input);
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--red);
+        }
+
+        .status.connected .status-dot {
+            background: var(--green);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-dim);
+        }
+
+        .btn-secondary {
+            background: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Main */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        /* Interface List */
+        .interface-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .interface-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border-radius: var(--radius);
+            gap: 16px;
+        }
+
+        .interface-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-hover);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .interface-icon svg {
+            width: 20px;
+            height: 20px;
+            color: var(--blue);
+        }
+
+        .interface-info {
+            flex: 1;
+        }
+
+        .interface-name {
+            font-weight: 500;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .interface-status {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 2px;
+        }
+
+        .interface-status .up { color: var(--green); }
+        .interface-status .down { color: var(--red); }
+
+        .interface-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        /* Toggle */
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-hover);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background: var(--accent);
+        }
+
+        .toggle input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+            background: #000;
+        }
+
+        /* TAS Schedule */
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .schedule-table th {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .schedule-table td {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 13px;
+        }
+
+        .gate-state {
+            display: flex;
+            gap: 2px;
+        }
+
+        .gate-bit {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            border-radius: 3px;
+            background: var(--bg-hover);
+            color: var(--text-muted);
+        }
+
+        .gate-bit.open {
+            background: var(--green);
+            color: #000;
+        }
+
+        /* Info */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+        }
+
+        .info-item {
+            padding: 12px;
+            background: var(--bg-input);
+            border-radius: var(--radius);
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px;
+        }
+
+        /* Placeholder */
+        .placeholder {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .placeholder svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+        }
+
+        .toast {
+            padding: 12px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 14px;
+            animation: slideIn 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .toast.success { border-left: 3px solid var(--green); }
+        .toast.error { border-left: 3px solid var(--red); }
+        .toast.info { border-left: 3px solid var(--blue); }
+
+        /* Loading */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            background: var(--bg-input);
+            padding: 4px;
+            border-radius: var(--radius);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 12px 16px;
+            }
+
+            .main {
+                padding: 16px;
+            }
+
+            .card-header, .card-body {
+                padding: 16px;
+            }
+
+            .interface-item {
+                flex-wrap: wrap;
+            }
+
+            .interface-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <div>
+                    <div class="logo-text">TSN Config</div>
+                    <div class="logo-sub">VelocityDRIVE-SP</div>
+                </div>
+            </div>
+            <div class="status" id="status">
+                <span class="status-dot"></span>
+                <span id="statusText">연결 안됨</span>
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" id="refreshBtn" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                새로고침
+            </button>
+            <button class="btn btn-primary" id="connectBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                    <line x1="12" y1="2" x2="12" y2="12"/>
+                </svg>
+                연결
+            </button>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="main" id="mainContent">
+        <div class="placeholder" id="placeholder">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+            </svg>
+            <div>보드에 연결하면 TSN 설정이 표시됩니다</div>
+        </div>
+
+        <div id="content" style="display: none;">
+            <!-- System Info -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2"/>
+                            <path d="M8 21h8M12 17v4"/>
+                        </svg>
+                        시스템 정보
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">플랫폼</div>
+                            <div class="info-value" id="infoPlatform">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">버전</div>
+                            <div class="info-value" id="infoVersion">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">인터페이스</div>
+                            <div class="info-value" id="infoInterfaces">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interfaces -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="1" y="4" width="22" height="16" rx="2"/>
+                            <path d="M1 10h22"/>
+                        </svg>
+                        인터페이스
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="interface-list" id="interfaceList">
+                        <!-- Dynamic -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- TSN Tabs -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                        TSN 설정
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="tas">TAS (Qbv)</button>
+                        <button class="tab" data-tab="cbs">CBS (Qav)</button>
+                        <button class="tab" data-tab="ptp">PTP (1588)</button>
+                    </div>
+
+                    <!-- TAS Tab -->
+                    <div class="tab-content active" id="tab-tas">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">인터페이스</label>
+                                <select class="form-select" id="tasInterface">
+                                    <option value="">선택하세요</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Gate Enable</label>
+                                <div style="padding-top: 6px;">
+                                    <label class="toggle">
+                                        <input type="checkbox" id="tasGateEnable">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Cycle Time (ns)</label>
+                            <input type="number" class="form-input" id="tasCycleTime" value="1000000" placeholder="1000000">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Gate Control List</label>
+                            <table class="schedule-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Gate States (TC 0-7)</th>
+                                        <th>Time Interval (ns)</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tasGateList">
+                                    <tr>
+                                        <td colspan="4" style="text-align: center; color: var(--text-secondary);">
+                                            인터페이스를 선택하세요
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <button class="btn btn-primary" id="tasApplyBtn" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <path d="M17 21v-8H7v8M7 3v5h8"/>
+                            </svg>
+                            TAS 설정 적용
+                        </button>
+                    </div>
+
+                    <!-- CBS Tab -->
+                    <div class="tab-content" id="tab-cbs">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">인터페이스</label>
+                                <select class="form-select" id="cbsInterface">
+                                    <option value="">선택하세요</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Traffic Class</label>
+                                <select class="form-select" id="cbsTrafficClass">
+                                    <option value="0">TC 0</option>
+                                    <option value="1">TC 1</option>
+                                    <option value="2">TC 2</option>
+                                    <option value="3">TC 3</option>
+                                    <option value="4">TC 4</option>
+                                    <option value="5">TC 5</option>
+                                    <option value="6">TC 6</option>
+                                    <option value="7">TC 7</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Idle Slope (kbps)</label>
+                                <input type="number" class="form-input" id="cbsIdleSlope" value="0" placeholder="0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Send Slope (kbps)</label>
+                                <input type="number" class="form-input" id="cbsSendSlope" value="0" placeholder="0">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" id="cbsApplyBtn" disabled>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <path d="M17 21v-8H7v8M7 3v5h8"/>
+                            </svg>
+                            CBS 설정 적용
+                        </button>
+                    </div>
+
+                    <!-- PTP Tab -->
+                    <div class="tab-content" id="tab-ptp">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">PTP State</div>
+                                <div class="info-value" id="ptpState">-</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Clock ID</div>
+                                <div class="info-value" id="ptpClockId">-</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Port State</div>
+                                <div class="info-value" id="ptpPortState">-</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Offset from Master</div>
+                                <div class="info-value" id="ptpOffset">-</div>
+                            </div>
+                        </div>
+                        <p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">
+                            PTP 상태는 읽기 전용입니다. PTP 설정은 시스템 레벨에서 구성됩니다.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Loading -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <script src="js/cbor.min.js"></script>
+    <script type="module" src="js/tsn.js"></script>
+</body>
+</html>
