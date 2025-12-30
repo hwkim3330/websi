@@ -3,37 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VelocityDRIVE-SP TSN Config</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f59e0b'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>VelocityDRIVE-SP TSN Monitor</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2310b981'><path d='M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z'/></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-main: #0f0f0f;
-            --bg-card: #1a1a1a;
-            --bg-input: #252525;
-            --bg-hover: #2a2a2a;
-            --text-primary: #e0e0e0;
-            --text-secondary: #808080;
-            --text-muted: #505050;
-            --accent: #f59e0b;
-            --accent-dim: #b45309;
-            --green: #22c55e;
-            --red: #ef4444;
+            --bg-main: #0f172a;
+            --bg-card: #1e293b;
+            --bg-input: #334155;
+            --border: #475569;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --accent: #10b981;
+            --accent-dim: #059669;
             --blue: #3b82f6;
-            --border: #303030;
-            --radius: 8px;
+            --purple: #8b5cf6;
+            --orange: #f59e0b;
+            --red: #ef4444;
+            --green: #22c55e;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'IBM Plex Sans', -apple-system, sans-serif;
-            font-size: 14px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg-main);
-            color: var(--text-primary);
-            line-height: 1.5;
+            color: var(--text);
             min-height: 100vh;
         }
 
@@ -60,28 +55,17 @@
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-
-        .logo svg {
-            width: 28px;
-            height: 28px;
+            font-size: 20px;
+            font-weight: 600;
             color: var(--accent);
         }
 
-        .logo-text {
-            font-weight: 600;
-            font-size: 18px;
-        }
+        .logo svg { width: 28px; height: 28px; }
 
-        .logo-sub {
-            color: var(--text-secondary);
-            font-size: 13px;
-        }
-
-        .status {
+        .status-badge {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             padding: 6px 12px;
             background: var(--bg-input);
             border-radius: 20px;
@@ -95,65 +79,75 @@
             background: var(--red);
         }
 
-        .status.connected .status-dot {
-            background: var(--green);
+        .status-dot.connected { background: var(--green); }
+
+        .header-right {
+            display: flex;
+            gap: 12px;
         }
 
         .btn {
             padding: 8px 16px;
             border: none;
-            border-radius: var(--radius);
+            border-radius: 8px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 6px;
-            transition: all 0.15s;
+            transition: all 0.2s;
         }
+
+        .btn svg { width: 18px; height: 18px; }
 
         .btn-primary {
             background: var(--accent);
-            color: #000;
+            color: white;
         }
 
-        .btn-primary:hover {
-            background: var(--accent-dim);
-        }
+        .btn-primary:hover { background: var(--accent-dim); }
 
         .btn-secondary {
             background: var(--bg-input);
-            color: var(--text-primary);
-            border: 1px solid var(--border);
+            color: var(--text);
         }
 
-        .btn-secondary:hover {
-            background: var(--bg-hover);
-        }
+        .btn-secondary:hover { background: var(--border); }
 
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .btn svg {
-            width: 16px;
-            height: 16px;
-        }
-
-        /* Main */
+        /* Main Layout */
         .main {
-            max-width: 1200px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 24px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .main { padding: 16px; }
         }
 
         /* Cards */
         .card {
             background: var(--bg-card);
+            border-radius: 12px;
             border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 16px;
+            overflow: hidden;
         }
 
         .card-header {
@@ -172,15 +166,58 @@
             gap: 8px;
         }
 
-        .card-title svg {
-            width: 20px;
-            height: 20px;
-            color: var(--accent);
+        .card-title svg { width: 20px; height: 20px; color: var(--accent); }
+
+        .card-body { padding: 20px; }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
         }
 
-        .card-body {
+        @media (max-width: 1200px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
             padding: 20px;
         }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-label svg { width: 16px; height: 16px; }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 600;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .stat-unit {
+            font-size: 14px;
+            color: var(--text-dim);
+            margin-left: 4px;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .stat-change.up { color: var(--green); }
+        .stat-change.down { color: var(--red); }
 
         /* Interface List */
         .interface-list {
@@ -192,107 +229,63 @@
         .interface-item {
             display: flex;
             align-items: center;
-            padding: 12px 16px;
+            padding: 16px;
             background: var(--bg-input);
-            border-radius: var(--radius);
+            border-radius: 8px;
             gap: 16px;
         }
 
         .interface-icon {
-            width: 40px;
-            height: 40px;
-            background: var(--bg-hover);
-            border-radius: var(--radius);
+            width: 48px;
+            height: 48px;
+            background: var(--bg-card);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        .interface-icon svg {
-            width: 20px;
-            height: 20px;
-            color: var(--blue);
-        }
+        .interface-icon svg { width: 24px; height: 24px; color: var(--blue); }
+        .interface-icon.up svg { color: var(--green); }
+        .interface-icon.down svg { color: var(--red); }
 
-        .interface-info {
-            flex: 1;
-        }
+        .interface-info { flex: 1; }
 
         .interface-name {
-            font-weight: 500;
-            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
         }
 
-        .interface-status {
+        .interface-stats {
             font-size: 12px;
-            color: var(--text-secondary);
+            color: var(--text-dim);
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .interface-rates {
+            display: flex;
+            gap: 16px;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .rate-item {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin-top: 2px;
+            gap: 4px;
         }
 
-        .interface-status .up { color: var(--green); }
-        .interface-status .down { color: var(--red); }
+        .rate-item.rx { color: var(--green); }
+        .rate-item.tx { color: var(--blue); }
 
-        .interface-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        /* Form */
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 13px;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 10px 12px;
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--text-primary);
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 14px;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .form-select {
-            width: 100%;
-            padding: 10px 12px;
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--text-primary);
-            font-size: 14px;
-            cursor: pointer;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-        }
-
-        /* Toggle */
-        .toggle {
+        .interface-toggle {
             position: relative;
             width: 44px;
             height: 24px;
         }
 
-        .toggle input {
+        .interface-toggle input {
             opacity: 0;
             width: 0;
             height: 0;
@@ -300,11 +293,11 @@
 
         .toggle-slider {
             position: absolute;
-            inset: 0;
-            background: var(--bg-hover);
-            border-radius: 12px;
             cursor: pointer;
-            transition: 0.2s;
+            inset: 0;
+            background: var(--border);
+            border-radius: 24px;
+            transition: 0.3s;
         }
 
         .toggle-slider::before {
@@ -314,103 +307,166 @@
             height: 18px;
             left: 3px;
             bottom: 3px;
-            background: var(--text-secondary);
+            background: white;
             border-radius: 50%;
-            transition: 0.2s;
+            transition: 0.3s;
         }
 
-        .toggle input:checked + .toggle-slider {
-            background: var(--accent);
+        input:checked + .toggle-slider { background: var(--accent); }
+        input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 250px;
         }
 
-        .toggle input:checked + .toggle-slider::before {
-            transform: translateX(20px);
-            background: #000;
+        /* TSN Config */
+        .form-group {
+            margin-bottom: 16px;
         }
 
-        /* TAS Schedule */
-        .schedule-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .schedule-table th,
-        .schedule-table td {
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .schedule-table th {
-            font-size: 12px;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .schedule-table td {
-            font-family: 'IBM Plex Mono', monospace;
+        .form-label {
+            display: block;
             font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
         }
 
-        .gate-state {
+        .form-input, .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-row {
             display: flex;
-            gap: 2px;
+            gap: 12px;
+        }
+
+        .form-row > * { flex: 1; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: var(--bg-input);
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: var(--text-dim);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background: var(--bg-card);
+            color: var(--text);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Gate Visualization */
+        .gate-visual {
+            display: flex;
+            gap: 4px;
+            margin: 16px 0;
         }
 
         .gate-bit {
-            width: 20px;
-            height: 20px;
+            flex: 1;
+            height: 40px;
+            background: var(--border);
+            border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
-            border-radius: 3px;
-            background: var(--bg-hover);
-            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .gate-bit:hover {
+            background: var(--bg-input);
         }
 
         .gate-bit.open {
             background: var(--green);
-            color: #000;
+            color: white;
         }
 
-        /* Info */
-        .info-grid {
+        /* PTP Status */
+        .ptp-status {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 16px;
         }
 
-        .info-item {
+        .ptp-item {
             padding: 12px;
             background: var(--bg-input);
-            border-radius: var(--radius);
+            border-radius: 8px;
         }
 
-        .info-label {
+        .ptp-label {
             font-size: 12px;
-            color: var(--text-secondary);
+            color: var(--text-dim);
             margin-bottom: 4px;
         }
 
-        .info-value {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 14px;
+        .ptp-value {
+            font-size: 16px;
+            font-weight: 600;
+            font-family: 'SF Mono', Monaco, monospace;
         }
 
-        /* Placeholder */
-        .placeholder {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--text-secondary);
+        /* Loading */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+            z-index: 1000;
         }
 
-        .placeholder svg {
+        .loading-overlay.active { display: flex; }
+
+        .spinner {
             width: 48px;
             height: 48px;
-            margin-bottom: 16px;
-            opacity: 0.3;
+            border: 4px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         /* Toast */
         .toast-container {
@@ -424,15 +480,14 @@
         }
 
         .toast {
-            padding: 12px 16px;
+            padding: 12px 20px;
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
-            font-size: 14px;
-            animation: slideIn 0.2s ease;
+            border-radius: 8px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
         }
 
         @keyframes slideIn {
@@ -440,101 +495,26 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
-        .toast.success { border-left: 3px solid var(--green); }
-        .toast.error { border-left: 3px solid var(--red); }
-        .toast.info { border-left: 3px solid var(--blue); }
+        .toast.success { border-left: 4px solid var(--green); }
+        .toast.error { border-left: 4px solid var(--red); }
+        .toast.info { border-left: 4px solid var(--blue); }
 
-        /* Loading */
-        .loading-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.8);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
+        /* Placeholder */
+        .placeholder {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-dim);
         }
 
-        .loading-overlay.active {
-            display: flex;
-        }
-
-        .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 4px;
+        .placeholder svg {
+            width: 64px;
+            height: 64px;
             margin-bottom: 16px;
-            background: var(--bg-input);
-            padding: 4px;
-            border-radius: var(--radius);
+            opacity: 0.5;
         }
 
-        .tab {
-            flex: 1;
-            padding: 10px 16px;
-            background: transparent;
-            border: none;
-            border-radius: 6px;
-            color: var(--text-secondary);
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .tab:hover {
-            color: var(--text-primary);
-        }
-
-        .tab.active {
-            background: var(--accent);
-            color: #000;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                padding: 12px 16px;
-            }
-
-            .main {
-                padding: 16px;
-            }
-
-            .card-header, .card-body {
-                padding: 16px;
-            }
-
-            .interface-item {
-                flex-wrap: wrap;
-            }
-
-            .interface-actions {
-                width: 100%;
-                justify-content: flex-end;
-            }
-        }
+        /* Section spacing */
+        .section { margin-bottom: 24px; }
     </style>
 </head>
 <body>
@@ -543,19 +523,16 @@
         <div class="header-left">
             <div class="logo">
                 <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    <path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>
                 </svg>
-                <div>
-                    <div class="logo-text">TSN Config</div>
-                    <div class="logo-sub">VelocityDRIVE-SP</div>
-                </div>
+                VelocityDRIVE-SP TSN
             </div>
-            <div class="status" id="status">
-                <span class="status-dot"></span>
+            <div class="status-badge">
+                <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">연결 안됨</span>
             </div>
         </div>
-        <div style="display: flex; gap: 8px;">
+        <div class="header-right">
             <button class="btn btn-secondary" id="refreshBtn" disabled>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -573,84 +550,135 @@
         </div>
     </header>
 
-    <!-- Main -->
-    <main class="main" id="mainContent">
-        <div class="placeholder" id="placeholder">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
-            </svg>
-            <div>보드에 연결하면 TSN 설정이 표시됩니다</div>
+    <main class="main">
+        <!-- Stats Overview -->
+        <div class="section">
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                        총 수신 패킷
+                    </div>
+                    <div class="stat-value" id="totalRxPackets">0</div>
+                    <div class="stat-change up" id="rxPacketsRate">+0 pps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                        총 송신 패킷
+                    </div>
+                    <div class="stat-value" id="totalTxPackets">0</div>
+                    <div class="stat-change up" id="txPacketsRate">+0 pps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                        </svg>
+                        수신 트래픽
+                    </div>
+                    <div class="stat-value" id="totalRxBytes">0<span class="stat-unit">B</span></div>
+                    <div class="stat-change up" id="rxBytesRate">+0 Bps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                        </svg>
+                        송신 트래픽
+                    </div>
+                    <div class="stat-value" id="totalTxBytes">0<span class="stat-unit">B</span></div>
+                    <div class="stat-change up" id="txBytesRate">+0 Bps</div>
+                </div>
+            </div>
         </div>
 
-        <div id="content" style="display: none;">
-            <!-- System Info -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="14" rx="2"/>
-                            <path d="M8 21h8M12 17v4"/>
-                        </svg>
-                        시스템 정보
+        <!-- Charts Row -->
+        <div class="section">
+            <div class="grid grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                            </svg>
+                            패킷 레이트 (pps)
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="packetChart"></canvas>
+                        </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <div class="info-label">플랫폼</div>
-                            <div class="info-value" id="infoPlatform">-</div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                            </svg>
+                            스루풋 (Mbps)
                         </div>
-                        <div class="info-item">
-                            <div class="info-label">버전</div>
-                            <div class="info-value" id="infoVersion">-</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">인터페이스</div>
-                            <div class="info-value" id="infoInterfaces">-</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="throughputChart"></canvas>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Interfaces -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="1" y="4" width="22" height="16" rx="2"/>
-                            <path d="M1 10h22"/>
-                        </svg>
-                        인터페이스
+        <!-- Interfaces & TSN Config -->
+        <div class="section">
+            <div class="grid grid-2">
+                <!-- Interfaces -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="1" y="4" width="22" height="16" rx="2"/>
+                                <path d="M1 10h22"/>
+                            </svg>
+                            인터페이스
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="interface-list" id="interfaceList">
+                            <div class="placeholder">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+                                </svg>
+                                <div>보드에 연결하면<br>인터페이스가 표시됩니다</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="interface-list" id="interfaceList">
-                        <!-- Dynamic -->
-                    </div>
-                </div>
-            </div>
 
-            <!-- TSN Tabs -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M12 6v6l4 2"/>
-                        </svg>
-                        TSN 설정
+                <!-- TSN Config -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                            TSN 설정
+                        </div>
                     </div>
-                </div>
-                <div class="card-body">
-                    <div class="tabs">
-                        <button class="tab active" data-tab="tas">TAS (Qbv)</button>
-                        <button class="tab" data-tab="cbs">CBS (Qav)</button>
-                        <button class="tab" data-tab="ptp">PTP (1588)</button>
-                    </div>
+                    <div class="card-body">
+                        <div class="tabs">
+                            <button class="tab active" data-tab="tasTab">TAS (Qbv)</button>
+                            <button class="tab" data-tab="cbsTab">CBS (Qav)</button>
+                            <button class="tab" data-tab="ptpTab">PTP</button>
+                        </div>
 
-                    <!-- TAS Tab -->
-                    <div class="tab-content active" id="tab-tas">
-                        <div class="form-row">
+                        <!-- TAS Tab -->
+                        <div class="tab-content active" id="tasTab">
                             <div class="form-group">
                                 <label class="form-label">인터페이스</label>
                                 <select class="form-select" id="tasInterface">
@@ -658,131 +686,103 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Gate Enable</label>
-                                <div style="padding-top: 6px;">
-                                    <label class="toggle">
+                                <label class="form-label">Gate 상태 (클릭하여 토글)</label>
+                                <div class="gate-visual" id="gateVisual">
+                                    <div class="gate-bit open" data-tc="0">0</div>
+                                    <div class="gate-bit open" data-tc="1">1</div>
+                                    <div class="gate-bit open" data-tc="2">2</div>
+                                    <div class="gate-bit open" data-tc="3">3</div>
+                                    <div class="gate-bit open" data-tc="4">4</div>
+                                    <div class="gate-bit open" data-tc="5">5</div>
+                                    <div class="gate-bit open" data-tc="6">6</div>
+                                    <div class="gate-bit open" data-tc="7">7</div>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Gate Enable</label>
+                                    <label class="interface-toggle">
                                         <input type="checkbox" id="tasGateEnable">
                                         <span class="toggle-slider"></span>
                                     </label>
                                 </div>
+                                <div class="form-group">
+                                    <label class="form-label">Cycle Time (ns)</label>
+                                    <input type="number" class="form-input" id="tasCycleTime" value="1000000" step="1000">
+                                </div>
                             </div>
+                            <button class="btn btn-primary" id="tasApplyBtn" disabled style="width: 100%;">
+                                TAS 설정 적용
+                            </button>
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label">Cycle Time (ns)</label>
-                            <input type="number" class="form-input" id="tasCycleTime" value="1000000" placeholder="1000000">
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Gate Control List</label>
-                            <table class="schedule-table">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Gate States (TC 0-7)</th>
-                                        <th>Time Interval (ns)</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tasGateList">
-                                    <tr>
-                                        <td colspan="4" style="text-align: center; color: var(--text-secondary);">
-                                            인터페이스를 선택하세요
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <button class="btn btn-primary" id="tasApplyBtn" disabled>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                                <path d="M17 21v-8H7v8M7 3v5h8"/>
-                            </svg>
-                            TAS 설정 적용
-                        </button>
-                    </div>
-
-                    <!-- CBS Tab -->
-                    <div class="tab-content" id="tab-cbs">
-                        <div class="form-row">
+                        <!-- CBS Tab -->
+                        <div class="tab-content" id="cbsTab">
                             <div class="form-group">
                                 <label class="form-label">인터페이스</label>
                                 <select class="form-select" id="cbsInterface">
                                     <option value="">선택하세요</option>
                                 </select>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">Traffic Class</label>
-                                <select class="form-select" id="cbsTrafficClass">
-                                    <option value="0">TC 0</option>
-                                    <option value="1">TC 1</option>
-                                    <option value="2">TC 2</option>
-                                    <option value="3">TC 3</option>
-                                    <option value="4">TC 4</option>
-                                    <option value="5">TC 5</option>
-                                    <option value="6">TC 6</option>
-                                    <option value="7">TC 7</option>
-                                </select>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Traffic Class</label>
+                                    <select class="form-select" id="cbsTrafficClass">
+                                        <option value="0">TC0</option>
+                                        <option value="1">TC1</option>
+                                        <option value="2">TC2</option>
+                                        <option value="3">TC3</option>
+                                        <option value="4">TC4</option>
+                                        <option value="5">TC5</option>
+                                        <option value="6">TC6</option>
+                                        <option value="7">TC7</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Idle Slope (kbps)</label>
+                                    <input type="number" class="form-input" id="cbsIdleSlope" value="0">
+                                </div>
                             </div>
+                            <button class="btn btn-primary" id="cbsApplyBtn" disabled style="width: 100%;">
+                                CBS 설정 적용
+                            </button>
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label">Idle Slope (kbps)</label>
-                                <input type="number" class="form-input" id="cbsIdleSlope" value="0" placeholder="0">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Send Slope (kbps)</label>
-                                <input type="number" class="form-input" id="cbsSendSlope" value="0" placeholder="0">
-                            </div>
-                        </div>
-
-                        <button class="btn btn-primary" id="cbsApplyBtn" disabled>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                                <path d="M17 21v-8H7v8M7 3v5h8"/>
-                            </svg>
-                            CBS 설정 적용
-                        </button>
-                    </div>
-
-                    <!-- PTP Tab -->
-                    <div class="tab-content" id="tab-ptp">
-                        <div class="info-grid">
-                            <div class="info-item">
-                                <div class="info-label">PTP State</div>
-                                <div class="info-value" id="ptpState">-</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Clock ID</div>
-                                <div class="info-value" id="ptpClockId">-</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Port State</div>
-                                <div class="info-value" id="ptpPortState">-</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Offset from Master</div>
-                                <div class="info-value" id="ptpOffset">-</div>
+                        <!-- PTP Tab -->
+                        <div class="tab-content" id="ptpTab">
+                            <div class="ptp-status">
+                                <div class="ptp-item">
+                                    <div class="ptp-label">상태</div>
+                                    <div class="ptp-value" id="ptpState">-</div>
+                                </div>
+                                <div class="ptp-item">
+                                    <div class="ptp-label">Clock ID</div>
+                                    <div class="ptp-value" id="ptpClockId">-</div>
+                                </div>
+                                <div class="ptp-item">
+                                    <div class="ptp-label">Port State</div>
+                                    <div class="ptp-value" id="ptpPortState">-</div>
+                                </div>
+                                <div class="ptp-item">
+                                    <div class="ptp-label">Offset (ns)</div>
+                                    <div class="ptp-value" id="ptpOffset">-</div>
+                                </div>
                             </div>
                         </div>
-                        <p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">
-                            PTP 상태는 읽기 전용입니다. PTP 설정은 시스템 레벨에서 구성됩니다.
-                        </p>
                     </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Toast -->
-    <div class="toast-container" id="toastContainer"></div>
-
     <!-- Loading -->
     <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-spinner"></div>
+        <div class="spinner"></div>
+        <div id="loadingText">로딩 중...</div>
     </div>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <script src="js/cbor.min.js"></script>
     <script type="module" src="js/tsn.js"></script>
