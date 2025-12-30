@@ -704,15 +704,24 @@ serialManager.addEventListener('announce', async () => {
     updateConnectionUI(true);
     showToast('보드 연결됨', 'success');
 
-    // Wait a bit for board to be fully ready
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait for board state to stabilize (clear any pending block transfers)
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     showLoading('데이터 로딩...');
-    await fetchInterfaces();
+    try {
+        await fetchInterfaces();
+    } catch (e) {
+        console.error('Initial fetch failed:', e);
+        showToast('데이터 로드 실패 - 새로고침 버튼을 눌러주세요', 'error');
+    }
 
     // Wait between requests to avoid block transfer conflicts
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await fetchPtpStatus();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        await fetchPtpStatus();
+    } catch (e) {
+        console.error('PTP fetch failed:', e);
+    }
     hideLoading();
 
     startPolling();
